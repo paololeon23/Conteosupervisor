@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="es-PE">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#D61F26">
+  <meta name="description" content="Conteo Grupo de Cosecha — Q Berries">
+  <title>Conteo Cosecha · Q Berries</title>
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Conteo Q Berries">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/assets/icon-512.png" type="image/png" sizes="512x512">
+  <link rel="icon" href="/assets/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="shortcut icon" href="/assets/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" sizes="512x512" href="/assets/icon-512.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div class="header-row">
+        <div class="brand-block">
+          <div class="brand-mark-wrap">
+            <img class="brand-mark" src="/assets/logo-qberries.png" alt="Q Berries">
+          </div>
+          <div class="brand-text">
+            <p class="brand-kicker">Q Berries</p>
+            <h1>Grupo de Cosecha</h1>
+            <p class="brand-sub">Conteo supervisor</p>
+          </div>
+        </div>
+        <div class="status-pills" aria-live="polite">
+          <span id="netPill" class="status-chip is-online" title="Con internet">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span class="status-text">En línea</span>
+          </span>
+          <button type="button" id="queuePill" class="status-chip is-queue is-empty" title="Sin pendientes · Historial" aria-label="Sin pendientes · Historial">
+            <svg class="status-chip__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 13v8"/><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="m8 17 4-4 4 4"/>
+            </svg>
+            <span class="status-text">0 pend.</span>
+          </button>
+        </div>
+      </div>
+      <div class="header-accent" aria-hidden="true"></div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab-btn tab-btn--active" data-tab="conteo" role="tab">Conteo</button>
+      <button class="tab-btn" data-tab="historial" role="tab">Historial</button>
+    </nav>
+
+    <section id="tab-conteo" class="tab-panel tab-panel--active" role="tabpanel">
+      <form id="form-conteo" autocomplete="off" novalidate>
+
+        <!-- Cabecera: Grupo, Supervisor, Fecha, Lote -->
+        <div class="card card--header">
+          <h2 class="card__title">Grupo de Cosecha</h2>
+          <div class="field-row">
+            <div class="field">
+              <label>Grupo</label>
+              <button type="button" id="btn-pick-grupo" class="btn btn--zona btn--pick-compact">
+                <span id="grupo-btn-label">Elegir grupo</span>
+              </button>
+              <input type="hidden" id="grupo" required>
+              <input type="hidden" id="grupo-label">
+            </div>
+            <div class="field">
+              <label>Fecha</label>
+              <button type="button" id="btn-pick-fecha" class="btn btn--zona btn--pick-compact">
+                <span id="fecha-label">Elegir fecha</span>
+              </button>
+              <input type="hidden" id="fecha" required>
+            </div>
+          </div>
+          <div class="field">
+            <label for="supervisor">Supervisor</label>
+            <input type="text" id="supervisor" placeholder="Nombre del supervisor" required>
+          </div>
+          <div class="field">
+            <label>Lote</label>
+            <button type="button" id="btn-pick-lote" class="btn btn--zona">Buscar lote</button>
+            <input type="hidden" id="lote">
+            <input type="hidden" id="codLote">
+            <input type="hidden" id="variedad">
+            <p id="lote-preview" class="pick-preview" hidden></p>
+            <input type="hidden" id="modulo">
+            <input type="hidden" id="turno">
+          </div>
+        </div>
+
+        <!-- Personal por rol (conteo de personas) -->
+        <div class="card">
+          <h2 class="card__title">Personal</h2>
+          <p class="card__hint">Cuántas <strong>personas</strong> hay en cada rol</p>
+          <div id="roles-grid" class="num-grid"></div>
+          <div id="total-personal-box" class="total-box total-box--blue">
+            <span class="total-box__label">Total</span>
+            <strong id="total-personal">0</strong>
+          </div>
+        </div>
+
+        <!-- Distribución por zonas (mismas personas repartidas) -->
+        <div class="card">
+          <h2 class="card__title">Distribución por Zonas</h2>
+          <p class="card__hint">Reparta el total entre zonas.</p>
+          <div id="zonas-list" class="zonas-list"></div>
+          <button type="button" id="btn-add-zona" class="btn btn--zona">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          Buscar zona
+        </button>
+
+          <div class="zona-nueva">
+            <label for="zona-nueva-input">Agregar zona nueva <span class="zona-nueva__tag">solo local</span></label>
+            <div class="zona-nueva__row">
+              <input type="text" id="zona-nueva-input" maxlength="40" placeholder="Ej. MI ZONA" autocomplete="off" autocapitalize="characters">
+              <button type="button" id="btn-zona-nueva" class="btn btn--zona-nueva">Agregar</button>
+            </div>
+            <p id="zona-nueva-msg" class="zona-nueva__msg" hidden></p>
+          </div>
+
+          <div id="total-zonas-box" class="total-box total-box--green">
+            <span class="total-box__label">En zonas</span>
+            <strong id="total-zonas">0</strong>
+          </div>
+        </div>
+
+        <!-- Almuerzos, Permisos, Faltas -->
+        <div class="card">
+          <h2 class="card__title">Resumen del día</h2>
+          <div class="resumen-grid">
+            <div class="num-field resumen--alm">
+              <label for="almuerzos" class="resumen-tile__label">
+                <span class="resumen-tile__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>
+                </span>
+                <span class="resumen-tile__name">Almuerzos</span>
+              </label>
+              <input type="number" id="almuerzos" min="0" inputmode="numeric" placeholder="0" class="num-input resumen-tile__input">
+            </div>
+            <div class="num-field resumen--perm">
+              <label for="permisos" class="resumen-tile__label">
+                <span class="resumen-tile__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>
+                </span>
+                <span class="resumen-tile__name">Permisos</span>
+              </label>
+              <input type="number" id="permisos" min="0" inputmode="numeric" placeholder="0" class="num-input resumen-tile__input">
+            </div>
+            <div class="num-field resumen--falt">
+              <label for="faltas" class="resumen-tile__label">
+                <span class="resumen-tile__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" x2="22" y1="8" y2="13"/><line x1="22" x2="17" y1="8" y2="13"/></svg>
+                </span>
+                <span class="resumen-tile__name">Faltas</span>
+              </label>
+              <input type="number" id="faltas" min="0" inputmode="numeric" placeholder="0" class="num-input resumen-tile__input">
+            </div>
+          </div>
+          <p class="resumen-note">Máx. = total personas</p>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" id="btn-ver-resumen" class="btn btn--primary btn--save">Ver resumen</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="tab-historial" class="tab-panel" role="tabpanel">
+      <div class="historial-panel">
+        <div class="historial-header">
+          <div class="historial-header__text">
+            <h2 class="historial-header__title">Historial</h2>
+            <p class="historial-header__sub">Conteos en este celular · 48 h</p>
+          </div>
+          <span id="historial-count" class="historial-count">0</span>
+        </div>
+
+        <div id="historial-empty" class="empty-state show">
+          <div class="empty-state__icon" aria-hidden="true">
+            <svg class="icon icon--inbox" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+              <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+            </svg>
+          </div>
+          <p class="empty-state__title">Sin conteos aún</p>
+          <p class="empty-state__hint">Los registros guardados aparecerán aquí</p>
+        </div>
+
+        <div id="historial-list" class="historial-list"></div>
+
+        <div class="historial-footer">
+          <nav id="historial-pager" class="hist-pager" aria-label="Paginación historial" hidden>
+            <button type="button" id="hist-prev" class="hist-pager__btn" aria-label="Página anterior">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <span id="hist-page-info" class="hist-pager__info">Pág. 1 / 1</span>
+            <button type="button" id="hist-next" class="hist-pager__btn" aria-label="Página siguiente">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </nav>
+          <button type="button" id="btn-refresh-app" class="btn-refresh-app">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+              <path d="M16 16h5v5"/>
+            </svg>
+            Actualizar app
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>Q Berries</span> · Paiján
+      <button type="button" id="btn-install-app" class="footer-install" hidden>Instalar app</button>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Modal calendario fecha -->
+  <div id="fecha-modal" class="modal zona-modal date-modal" aria-hidden="true" role="dialog" aria-label="Seleccionar fecha">
+    <div class="zona-sheet date-sheet">
+      <div class="zona-sheet__head">
+        <h3>Elegir fecha</h3>
+        <button type="button" id="fecha-close" class="zona-sheet__close" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="date-sheet__body">
+        <div class="date-nav">
+          <button type="button" id="fecha-prev" class="date-nav__btn" aria-label="Mes anterior">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <h4 id="fecha-month-label" class="date-nav__title">Agosto 2026</h4>
+          <button type="button" id="fecha-next" class="date-nav__btn" aria-label="Mes siguiente">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+        <div class="date-weekdays" aria-hidden="true">
+          <span>LU</span><span>MA</span><span>MI</span><span>JU</span><span>VI</span><span>SA</span><span>DO</span>
+        </div>
+        <div id="fecha-grid" class="date-grid"></div>
+        <div class="date-foot">
+          <button type="button" id="fecha-clear" class="date-foot__ghost">Borrar</button>
+          <button type="button" id="fecha-today" class="date-foot__today">Hoy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal buscar lote -->
+  <div id="lote-modal" class="modal zona-modal" aria-hidden="true" role="dialog">
+    <div class="zona-sheet">
+      <div class="zona-sheet__head">
+        <h3>Buscar lote</h3>
+        <button type="button" id="lote-close" class="zona-sheet__close" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="zona-search-wrap">
+        <span class="zona-search-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        <input type="search" id="lote-search" class="zona-search" placeholder="Buscar lote…" autocomplete="off">
+      </div>
+      <div class="zona-list-wrap">
+        <div id="lote-list" class="zona-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal buscar grupo -->
+  <div id="grupo-modal" class="modal zona-modal" aria-hidden="true" role="dialog">
+    <div class="zona-sheet">
+      <div class="zona-sheet__head">
+        <h3>Seleccionar grupo</h3>
+        <button type="button" id="grupo-close" class="zona-sheet__close" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="zona-search-wrap">
+        <span class="zona-search-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        <input type="search" id="grupo-search" class="zona-search" placeholder="Buscar grupo…" autocomplete="off">
+      </div>
+      <div class="zona-list-wrap">
+        <div id="grupo-list" class="zona-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal buscar zona -->
+  <div id="zona-modal" class="modal zona-modal" aria-hidden="true" role="dialog">
+    <div class="zona-sheet">
+      <div class="zona-sheet__head">
+        <h3>Buscar zona</h3>
+        <button type="button" id="zona-close" class="zona-sheet__close" aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="zona-search-wrap">
+        <span class="zona-search-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        <input type="search" id="zona-search" class="zona-search" placeholder="Buscar zona…" autocomplete="off">
+      </div>
+      <div class="zona-list-wrap">
+        <div id="zona-list" class="zona-list"></div>
+      </div>
+      <div id="zona-add-bar" class="zona-add-bar">
+        <label for="zona-add-input">Agregar zona nueva <span class="zona-nueva__tag">solo local</span></label>
+        <div class="zona-nueva__row">
+          <input type="text" id="zona-add-input" maxlength="40" placeholder="Ej. MI ZONA" autocomplete="off" autocapitalize="characters">
+          <button type="button" id="zona-add-btn" class="btn btn--zona-nueva">Agregar</button>
+        </div>
+        <p id="zona-add-hint" class="zona-add-hint" hidden></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Comprobante / respaldo visual -->
+  <div id="comprobante-modal" class="modal comprobante-modal" aria-hidden="true" role="dialog" aria-label="Comprobante de conteo">
+    <div class="comprobante-dialog">
+      <div class="comprobante-card">
+        <div id="comprobante-root" class="comprobante-sheet"></div>
+        <div class="comprobante-foot">
+          <p id="comprobante-hint-preview" class="comprobante-hint">Revise y confirme para guardar</p>
+          <p id="comprobante-hint-done" class="comprobante-hint" hidden>Capture y envíe como respaldo</p>
+          <div id="comprobante-foot-preview" class="comprobante-actions">
+            <button type="button" id="comprobante-back" class="btn btn--ghost comprobante-btn-back">Volver</button>
+            <button type="button" id="comprobante-guardar" class="btn btn--primary btn--save">Guardar conteo</button>
+          </div>
+          <div id="comprobante-foot-done" hidden>
+            <button type="button" id="comprobante-close" class="btn btn--primary btn--save">Listo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/modules/app.js"></script>
+</body>
+</html>
