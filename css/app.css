@@ -2081,8 +2081,10 @@ body.modal-open {
 }
 
 .date-cell--today {
-  background: rgba(247, 148, 30, 0.12);
+  background: rgba(247, 148, 30, 0.18);
   color: var(--qb-orange);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 2px rgba(247, 148, 30, 0.55);
 }
 
 .date-cell--selected {

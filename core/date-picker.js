@@ -11,9 +11,38 @@ let onChangeCb = null;
 let datePickerInited = false;
 
 function parseIso(iso) {
-  const [y, m, d] = String(iso || '').split('-').map(n => parseInt(n, 10));
-  if (!y || !m || !d) return null;
-  return { y, m: m - 1, d };
+  const raw = String(iso || '').trim();
+  if (!raw) return null;
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10);
+    const m = parseInt(isoMatch[2], 10);
+    const d = parseInt(isoMatch[3], 10);
+    if (y >= 2000 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return { y, m: m - 1, d };
+    }
+  }
+
+  const displayMatch = raw.match(/^(\d{1,2})-([a-záéíóúñ]+)-(\d{4})$/i);
+  if (displayMatch) {
+    const d = parseInt(displayMatch[1], 10);
+    const mesNombre = displayMatch[2].toLowerCase();
+    const y = parseInt(displayMatch[3], 10);
+    const mi = MESES.findIndex(m => m.toLowerCase() === mesNombre);
+    if (mi >= 0 && d >= 1 && d <= 31 && y >= 2000) {
+      return { y, m: mi, d };
+    }
+  }
+
+  return null;
+}
+
+function todayParts() {
+  const p = parseIso(todayStr());
+  if (p) return p;
+  const now = new Date();
+  return { y: now.getFullYear(), m: now.getMonth(), d: now.getDate() };
 }
 
 function toIso(y, m, d) {
@@ -36,8 +65,8 @@ export function setFecha(iso, { silent = false } = {}) {
   const btn = $('#btn-pick-fecha');
   if (!input) return;
 
-  const valid = iso && parseIso(iso);
-  const safeIso = valid ? iso : '';
+  const p = parseIso(iso);
+  const safeIso = p ? toIso(p.y, p.m, p.d) : '';
   input.value = safeIso;
   const text = safeIso ? formatFechaDisplay(safeIso) : 'Elegir fecha';
   if (label) label.textContent = text;
@@ -48,8 +77,7 @@ export function setFecha(iso, { silent = false } = {}) {
 
 function syncViewToSelection() {
   const iso = getFecha() || todayStr();
-  const p = parseIso(iso) || parseIso(todayStr());
-  if (!p) return;
+  const p = parseIso(iso) || todayParts();
   viewYear = p.y;
   viewMonth = p.m;
 }
@@ -59,7 +87,10 @@ function renderCalendar() {
   const title = $('#fecha-month-label');
   if (!grid || !title) return;
 
-  syncViewToSelection();
+  if (!viewYear || viewMonth < 0 || viewMonth > 11) {
+    syncViewToSelection();
+  }
+
   title.textContent = `${MESES[viewMonth]} ${viewYear}`;
 
   const first = new Date(viewYear, viewMonth, 1);
@@ -121,12 +152,9 @@ export function openDatePicker() {
   const modal = $('#fecha-modal');
   if (!modal) return;
 
-  try {
-    renderCalendar();
-    openModalElement(modal);
-  } catch {
-    openModalElement(modal);
-  }
+  syncViewToSelection();
+  renderCalendar();
+  openModalElement(modal);
 }
 
 export function closeDatePicker() {
@@ -168,10 +196,13 @@ export function initDatePicker(onChange) {
   datePickerInited = true;
 
   bindModalControls();
+  syncViewToSelection();
 
   const btn = $('#btn-pick-fecha');
   if (getFecha()) {
     $('#fecha-label') && ($('#fecha-label').textContent = formatFechaDisplay(getFecha()));
     btn?.classList.add('btn--pick-filled');
+  } else {
+    setFecha(todayStr(), { silent: true });
   }
 }

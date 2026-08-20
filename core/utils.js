@@ -1,7 +1,25 @@
 import { TZ } from './api-config.js';
 
 export function todayStr() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+  try {
+    const s = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  } catch { /* fallback abajo */ }
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now);
+  const y = parts.find(p => p.type === 'year')?.value;
+  const m = parts.find(p => p.type === 'month')?.value;
+  const d = parts.find(p => p.type === 'day')?.value;
+  if (y && m && d) return `${y}-${m}-${d}`;
+  const y2 = now.getFullYear();
+  const m2 = String(now.getMonth() + 1).padStart(2, '0');
+  const d2 = String(now.getDate()).padStart(2, '0');
+  return `${y2}-${m2}-${d2}`;
 }
 
 export function nowTimeStr() {

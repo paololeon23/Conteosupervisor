@@ -1,4 +1,4 @@
-const CACHE = 'qb-conteo-v2.12.5';
+const CACHE = 'qb-conteo-v2.12.6';
 const ASSETS = [
   '/index.html',
   '/css/app.css',
