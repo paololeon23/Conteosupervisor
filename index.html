@@ -25,6 +25,13 @@
   </script>
 </head>
 <body>
+  <script>
+    document.body.classList.remove('modal-open');
+    document.querySelectorAll('.modal--open').forEach(function (m) {
+      m.classList.remove('modal--open');
+      m.setAttribute('aria-hidden', 'true');
+    });
+  </script>
   <div class="app">
     <header class="app-header">
       <div class="header-row">

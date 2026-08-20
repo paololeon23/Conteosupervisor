@@ -10,31 +10,39 @@ import { toast, resetBodyScrollLock, closeAllModals } from '../core/utils.js';
 async function init() {
   closeAllModals();
   resetBodyScrollLock();
-  registerSW();
-  await restoreFromIDB();
-  dedupeQueue();
-  await restoreBorradorFromIDB();
 
-  const offlineReady = await ensureOfflineReady();
-  if (offlineReady && navigator.onLine && !localStorage.getItem('qb_offline_v3')) {
-    localStorage.setItem('qb_offline_v3', '1');
-    toast('Lista para usar sin internet', 'success');
-  }
-
-  initAppRefresh();
+  // UI primero — los clics no deben esperar al service worker
   initTabs();
   initStatusPills(() => switchTab('historial'));
-  await initConteo();
-  initHistorial();
-  updateNetBadge();
-  initInstallPrompt();
+  initAppRefresh();
+  registerSW();
 
-  window.addEventListener('online', onReconnect);
-  window.addEventListener('net:online', onReconnect);
-  window.addEventListener('offline', updateNetBadge);
-  window.addEventListener('historial:update', updateNetBadge);
+  try {
+    await restoreFromIDB();
+    dedupeQueue();
+    await restoreBorradorFromIDB();
+    await initConteo();
+    initHistorial();
+    updateNetBadge();
+    initInstallPrompt();
 
-  if (isOnline()) await flushPendingQueue();
+    window.addEventListener('online', onReconnect);
+    window.addEventListener('net:online', onReconnect);
+    window.addEventListener('offline', updateNetBadge);
+    window.addEventListener('historial:update', updateNetBadge);
+
+    if (isOnline()) flushPendingQueue();
+
+    ensureOfflineReady().then((offlineReady) => {
+      if (offlineReady && navigator.onLine && !localStorage.getItem('qb_offline_v3_1')) {
+        localStorage.setItem('qb_offline_v3_1', '1');
+        toast('Lista para usar sin internet', 'success');
+      }
+    });
+  } catch (err) {
+    console.error('[conteo] init error', err);
+    toast('Error al iniciar — recargue la app', 'error');
+  }
 }
 
 function switchTab(tab) {

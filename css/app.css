@@ -957,11 +957,6 @@ button.status-chip {
 
 body.modal-open .app {
   overflow: hidden;
-  touch-action: none;
-}
-
-body.modal-open {
-  touch-action: none;
 }
 
 .modal__sheet {

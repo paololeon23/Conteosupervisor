@@ -1,27 +1,40 @@
 import { toast } from './utils.js';
 
+const CACHE_NAME = 'qb-conteo-v3.1.1';
+let swReloadPending = false;
+
 export function registerSW() {
   if (!('serviceWorker' in navigator)) return;
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!swReloadPending) return;
+    swReloadPending = false;
     window.location.reload();
   });
+}
+
+function waitWithTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(resolve, ms))
+  ]);
 }
 
 export async function ensureOfflineReady() {
   if (!('serviceWorker' in navigator)) return false;
 
   try {
-    const reg = await navigator.serviceWorker.register('/service-worker.js', {
-      scope: '/',
-      updateViaCache: 'none'
-    });
+    const reg = await navigator.serviceWorker.getRegistration('/')
+      || await navigator.serviceWorker.register('/service-worker.js', {
+        scope: '/',
+        updateViaCache: 'none'
+      });
 
-    await navigator.serviceWorker.ready;
+    await waitWithTimeout(navigator.serviceWorker.ready, 6000);
     reg.active?.postMessage({ type: 'WARM' });
     await new Promise((r) => setTimeout(r, 400));
 
-    const cache = await caches.open('qb-conteo-v3.1.0');
+    const cache = await caches.open(CACHE_NAME);
     return Boolean(await cache.match('/index.html'));
   } catch {
     return false;
@@ -84,6 +97,7 @@ export async function refreshApp() {
   }
 
   if (reg.waiting) {
+    swReloadPending = true;
     reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     toast('Actualizando app…', 'info');
     return;
@@ -94,6 +108,7 @@ export async function refreshApp() {
   } catch { /* sin red */ }
 
   if (reg.waiting) {
+    swReloadPending = true;
     reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     toast('Actualizando app…', 'info');
     return;
