@@ -1,8 +1,9 @@
 {
+  "id": "/",
   "name": "Conteo Cosecha — Q Berries",
   "short_name": "Conteo",
   "description": "Registro diario de grupo de cosecha offline para Q Berries",
-  "start_url": "/index.html",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

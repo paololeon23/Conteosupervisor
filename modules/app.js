@@ -1,4 +1,4 @@
-import { registerSW, initAppRefresh, initInstallPrompt } from '../core/pwa.js';
+import { registerSW, ensureOfflineReady, initAppRefresh, initInstallPrompt } from '../core/pwa.js';
 import { restoreFromIDB } from '../core/offline-queue.js';
 import { dedupeQueue, flushPendingQueue, isFlushBlocked } from '../core/save-conteo.js';
 import { restoreBorradorFromIDB } from '../core/draft.js';
@@ -10,10 +10,17 @@ import { toast, resetBodyScrollLock, closeAllModals } from '../core/utils.js';
 async function init() {
   closeAllModals();
   resetBodyScrollLock();
+  registerSW();
   await restoreFromIDB();
   dedupeQueue();
   await restoreBorradorFromIDB();
-  registerSW();
+
+  const offlineReady = await ensureOfflineReady();
+  if (offlineReady && navigator.onLine && !localStorage.getItem('qb_offline_v3')) {
+    localStorage.setItem('qb_offline_v3', '1');
+    toast('Lista para usar sin internet', 'success');
+  }
+
   initAppRefresh();
   initTabs();
   initStatusPills(() => switchTab('historial'));

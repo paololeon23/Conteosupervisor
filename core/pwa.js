@@ -6,26 +6,26 @@ export function registerSW() {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     window.location.reload();
   });
+}
 
-  window.addEventListener('load', async () => {
-    try {
-      const reg = await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+export async function ensureOfflineReady() {
+  if (!('serviceWorker' in navigator)) return false;
 
-      reg.addEventListener('updatefound', () => {
-        const worker = reg.installing;
-        if (!worker) return;
-        worker.addEventListener('statechange', () => {
-          if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-            window.dispatchEvent(new CustomEvent('sw:update-ready'));
-          }
-        });
-      });
+  try {
+    const reg = await navigator.serviceWorker.register('/service-worker.js', {
+      scope: '/',
+      updateViaCache: 'none'
+    });
 
-      if (reg.waiting) window.dispatchEvent(new CustomEvent('sw:update-ready'));
-    } catch (err) {
-      console.warn('SW registro falló', err);
-    }
-  });
+    await navigator.serviceWorker.ready;
+    reg.active?.postMessage({ type: 'WARM' });
+    await new Promise((r) => setTimeout(r, 400));
+
+    const cache = await caches.open('qb-conteo-v3.1.0');
+    return Boolean(await cache.match('/index.html'));
+  } catch {
+    return false;
+  }
 }
 
 export function isStandalone() {
@@ -33,13 +33,8 @@ export function isStandalone() {
     || window.navigator.standalone === true;
 }
 
-/** Evento diferido del navegador para instalar la PWA */
 let deferredInstallPrompt = null;
 
-/**
- * Captura el aviso de instalación y lo muestra solo al pulsar el botón.
- * Chrome registra "Banner not shown…" en consola: es informativo, no un fallo.
- */
 export function initInstallPrompt(btnId = '#btn-install-app') {
   if (isStandalone()) return;
 
@@ -96,15 +91,15 @@ export async function refreshApp() {
 
   try {
     await reg.update();
-  } catch {
-    /* sin red u otro error — recargar igual */
-  }
+  } catch { /* sin red */ }
 
   if (reg.waiting) {
     reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     toast('Actualizando app…', 'info');
     return;
   }
+
+  if (reg.active) reg.active.postMessage({ type: 'WARM' });
 
   toast('App al día — recargando…', 'info');
   window.setTimeout(() => window.location.reload(), 400);

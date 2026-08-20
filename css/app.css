@@ -22,7 +22,7 @@
   --radius: 20px;
   --radius-sm: 12px;
   --blur: 20px;
-  --font: 'Inter', system-ui, -apple-system, sans-serif;
+  --font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
 
