@@ -1,7 +1,10 @@
-import { toast } from './utils.js';
+import { toast, openModalElement, closeModalElement, $ } from './utils.js';
 
-const CACHE_NAME = 'qb-conteo-v3.1.1';
+const CACHE_NAME = 'qb-conteo-v3.1.2';
+const INSTALL_DISMISS_KEY = 'qb_install_banner_dismiss';
+
 let swReloadPending = false;
+let deferredInstallPrompt = null;
 
 export function registerSW() {
   if (!('serviceWorker' in navigator)) return;
@@ -46,42 +49,125 @@ export function isStandalone() {
     || window.navigator.standalone === true;
 }
 
-let deferredInstallPrompt = null;
+export function isAndroid() {
+  return /Android/i.test(navigator.userAgent);
+}
 
-export function initInstallPrompt(btnId = '#btn-install-app') {
+function isInstallDismissed() {
+  try {
+    return localStorage.getItem(INSTALL_DISMISS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function dismissInstallBanner() {
+  try { localStorage.setItem(INSTALL_DISMISS_KEY, '1'); } catch { /* ok */ }
+  hideInstallUI();
+}
+
+function hideInstallUI() {
+  $('#install-banner')?.setAttribute('hidden', '');
+  ['#btn-install-app', '#btn-install-banner', '#btn-install-historial'].forEach((sel) => {
+    const el = $(sel);
+    if (el) el.hidden = true;
+  });
+}
+
+function showInstallUI() {
+  if (isStandalone() || isInstallDismissed()) return;
+
+  if (isAndroid()) {
+    $('#install-banner')?.removeAttribute('hidden');
+  }
+
+  ['#btn-install-app', '#btn-install-banner', '#btn-install-historial'].forEach((sel) => {
+    const el = $(sel);
+    if (el) el.hidden = false;
+  });
+}
+
+function openInstallHelp() {
+  openModalElement($('#install-help-modal'));
+}
+
+function closeInstallHelp() {
+  closeModalElement($('#install-help-modal'));
+}
+
+async function triggerInstall() {
+  if (deferredInstallPrompt) {
+    try {
+      await deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      if (outcome === 'accepted') {
+        hideInstallUI();
+        toast('Instalando app en su celular…', 'success');
+      }
+    } catch {
+      toast('No se pudo abrir la instalación', 'warn');
+      if (isAndroid()) openInstallHelp();
+    } finally {
+      deferredInstallPrompt = null;
+    }
+    return;
+  }
+
+  if (isAndroid()) {
+    openInstallHelp();
+    return;
+  }
+
+  toast('Use Chrome en Android para instalar la app', 'info');
+}
+
+function bindInstallButtons(selectors) {
+  selectors.forEach((sel) => {
+    $(sel)?.addEventListener('click', (e) => {
+      e.preventDefault();
+      triggerInstall();
+    });
+  });
+}
+
+export function initInstallPrompt() {
   if (isStandalone()) return;
 
-  const btn = document.querySelector(btnId);
-  if (!btn) return;
+  bindInstallButtons([
+    '#btn-install-app',
+    '#btn-install-banner',
+    '#btn-install-historial'
+  ]);
+
+  $('#btn-install-dismiss')?.addEventListener('click', dismissInstallBanner);
+  $('#install-help-close')?.addEventListener('click', closeInstallHelp);
+  $('#install-help-modal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'install-help-modal') closeInstallHelp();
+  });
+  $('#install-help-retry')?.addEventListener('click', () => {
+    closeInstallHelp();
+    triggerInstall();
+  });
 
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredInstallPrompt = e;
-    btn.hidden = false;
-  });
-
-  btn.addEventListener('click', async () => {
-    if (!deferredInstallPrompt) {
-      toast('Instalación no disponible en este navegador', 'info');
-      return;
-    }
-
-    try {
-      await deferredInstallPrompt.prompt();
-      const { outcome } = await deferredInstallPrompt.userChoice;
-      if (outcome === 'accepted') btn.hidden = true;
-    } catch {
-      toast('No se pudo abrir la instalación', 'warn');
-    } finally {
-      deferredInstallPrompt = null;
-    }
+    showInstallUI();
   });
 
   window.addEventListener('appinstalled', () => {
     deferredInstallPrompt = null;
-    btn.hidden = true;
-    toast('App instalada correctamente', 'info');
+    hideInstallUI();
+    toast('App instalada — ábrala desde el icono del inicio', 'success');
   });
+
+  // Android: mostrar banner aunque el evento tarde unos segundos
+  if (isAndroid() && !isInstallDismissed()) {
+    showInstallUI();
+    window.setTimeout(() => {
+      if (!isStandalone() && !isInstallDismissed()) showInstallUI();
+    }, 2500);
+  }
 }
 
 export async function refreshApp() {

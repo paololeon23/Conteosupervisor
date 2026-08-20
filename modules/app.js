@@ -15,6 +15,7 @@ async function init() {
   initTabs();
   initStatusPills(() => switchTab('historial'));
   initAppRefresh();
+  initInstallPrompt();
   registerSW();
 
   try {
@@ -24,7 +25,6 @@ async function init() {
     await initConteo();
     initHistorial();
     updateNetBadge();
-    initInstallPrompt();
 
     window.addEventListener('online', onReconnect);
     window.addEventListener('net:online', onReconnect);
@@ -34,8 +34,8 @@ async function init() {
     if (isOnline()) flushPendingQueue();
 
     ensureOfflineReady().then((offlineReady) => {
-      if (offlineReady && navigator.onLine && !localStorage.getItem('qb_offline_v3_1')) {
-        localStorage.setItem('qb_offline_v3_1', '1');
+      if (offlineReady && navigator.onLine && !localStorage.getItem('qb_offline_v3_2')) {
+        localStorage.setItem('qb_offline_v3_2', '1');
         toast('Lista para usar sin internet', 'success');
       }
     });

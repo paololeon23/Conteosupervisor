@@ -61,6 +61,20 @@
       <div class="header-accent" aria-hidden="true"></div>
     </header>
 
+    <div id="install-banner" class="install-banner" hidden>
+      <div class="install-banner__icon" aria-hidden="true">
+        <img src="/assets/icon-192.png" alt="" width="44" height="44">
+      </div>
+      <div class="install-banner__body">
+        <p class="install-banner__title">Instalar Conteo Q Berries</p>
+        <p class="install-banner__sub">Presione para descargar en su celular · funciona sin internet</p>
+      </div>
+      <button type="button" id="btn-install-banner" class="install-banner__btn">
+        Instalar
+      </button>
+      <button type="button" id="btn-install-dismiss" class="install-banner__close" aria-label="Ocultar">×</button>
+    </div>
+
     <nav class="tabs" role="tablist">
       <button class="tab-btn tab-btn--active" data-tab="conteo" role="tab">Conteo</button>
       <button class="tab-btn" data-tab="historial" role="tab">Historial</button>
@@ -224,6 +238,14 @@
             </svg>
             Actualizar app
           </button>
+          <button type="button" id="btn-install-historial" class="btn-install-app" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" x2="12" y1="15" y2="3"/>
+            </svg>
+            Descargar e instalar
+          </button>
         </div>
       </div>
     </section>
@@ -354,6 +376,27 @@
             <button type="button" id="comprobante-close" class="btn btn--primary btn--save">Listo</button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ayuda instalación Android (si el navegador no muestra el diálogo) -->
+  <div id="install-help-modal" class="modal zona-modal" aria-hidden="true" role="dialog" aria-label="Cómo instalar">
+    <div class="zona-sheet install-help-sheet">
+      <div class="zona-sheet__head">
+        <h3>Instalar en Android</h3>
+        <button type="button" id="install-help-close" class="zona-sheet__close" aria-label="Cerrar">
+          <span class="zona-sheet__close-x" aria-hidden="true">×</span>
+        </button>
+      </div>
+      <div class="install-help-body">
+        <ol class="install-help-steps">
+          <li>Abra esta página en <strong>Google Chrome</strong></li>
+          <li>Toque el menú <strong>⋮</strong> (arriba a la derecha)</li>
+          <li>Elija <strong>Instalar aplicación</strong> o <strong>Agregar a pantalla de inicio</strong></li>
+          <li>Confirme con <strong>Instalar</strong></li>
+        </ol>
+        <button type="button" id="install-help-retry" class="btn btn--primary btn--save">Intentar de nuevo</button>
       </div>
     </div>
   </div>
