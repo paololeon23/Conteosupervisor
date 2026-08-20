@@ -142,4 +142,8 @@ export function closeAllModals() {
     delete modal.dataset.returnFocus;
   });
   resetBodyScrollLock();
+  document.body.classList.remove('modal-open');
+  document.body.style.removeProperty('touch-action');
+  const app = document.querySelector('.app');
+  if (app) app.style.removeProperty('touch-action');
 }

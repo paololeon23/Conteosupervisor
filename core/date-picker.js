@@ -8,6 +8,7 @@ const MESES = [
 let viewYear = 0;
 let viewMonth = 0;
 let onChangeCb = null;
+let datePickerInited = false;
 
 function parseIso(iso) {
   const [y, m, d] = String(iso || '').split('-').map(n => parseInt(n, 10));
@@ -35,17 +36,20 @@ export function setFecha(iso, { silent = false } = {}) {
   const btn = $('#btn-pick-fecha');
   if (!input) return;
 
-  input.value = iso || '';
-  const text = iso ? formatFechaDisplay(iso) : 'Elegir fecha';
+  const valid = iso && parseIso(iso);
+  const safeIso = valid ? iso : '';
+  input.value = safeIso;
+  const text = safeIso ? formatFechaDisplay(safeIso) : 'Elegir fecha';
   if (label) label.textContent = text;
-  if (btn) btn.classList.toggle('btn--pick-filled', Boolean(iso));
+  if (btn) btn.classList.toggle('btn--pick-filled', Boolean(safeIso));
 
-  if (!silent && onChangeCb) onChangeCb(iso);
+  if (!silent && onChangeCb && safeIso) onChangeCb(safeIso);
 }
 
 function syncViewToSelection() {
   const iso = getFecha() || todayStr();
   const p = parseIso(iso) || parseIso(todayStr());
+  if (!p) return;
   viewYear = p.y;
   viewMonth = p.m;
 }
@@ -55,6 +59,7 @@ function renderCalendar() {
   const title = $('#fecha-month-label');
   if (!grid || !title) return;
 
+  syncViewToSelection();
   title.textContent = `${MESES[viewMonth]} ${viewYear}`;
 
   const first = new Date(viewYear, viewMonth, 1);
@@ -113,20 +118,22 @@ function renderCalendar() {
 }
 
 export function openDatePicker() {
-  syncViewToSelection();
-  renderCalendar();
-  openModalElement($('#fecha-modal'));
+  const modal = $('#fecha-modal');
+  if (!modal) return;
+
+  try {
+    renderCalendar();
+    openModalElement(modal);
+  } catch {
+    openModalElement(modal);
+  }
 }
 
 export function closeDatePicker() {
   closeModalElement($('#fecha-modal'));
 }
 
-export function initDatePicker(onChange) {
-  onChangeCb = onChange;
-
-  $('#btn-pick-fecha')?.addEventListener('click', openDatePicker);
-
+function bindModalControls() {
   $('#fecha-close')?.addEventListener('click', closeDatePicker);
   $('#fecha-modal')?.addEventListener('click', (e) => {
     if (e.target.id === 'fecha-modal') closeDatePicker();
@@ -153,6 +160,14 @@ export function initDatePicker(onChange) {
     setFecha('');
     closeDatePicker();
   });
+}
+
+export function initDatePicker(onChange) {
+  onChangeCb = onChange;
+  if (datePickerInited) return;
+  datePickerInited = true;
+
+  bindModalControls();
 
   const btn = $('#btn-pick-fecha');
   if (getFecha()) {

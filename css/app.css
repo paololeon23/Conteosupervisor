@@ -950,6 +950,7 @@ button.status-chip {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   overscroll-behavior: contain;
+  z-index: 1100;
 }
 
 .modal--open { display: flex; }
@@ -1548,46 +1549,77 @@ body.modal-open {
 }
 
 .zona-sheet__head {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
   align-items: center;
-  position: relative;
   flex-shrink: 0;
-  padding: 16px 48px 12px;
-  gap: 8px;
+  padding: 12px 10px 10px;
+  gap: 4px;
+  min-height: 56px;
+  box-sizing: border-box;
 }
 
 .zona-sheet__head h3 {
+  grid-column: 2;
+  grid-row: 1;
   font-size: 1rem;
   font-weight: 700;
   min-width: 0;
+  margin: 0;
   text-align: center;
-  width: 100%;
+  padding: 0;
+  width: auto;
 }
 
 .zona-sheet__close {
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
-  border: none;
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  position: static;
+  transform: none;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border: 2px solid rgba(82, 173, 75, 0.5);
   border-radius: 50%;
-  background: rgba(82, 173, 75, 0.12);
+  background: #fff;
   color: var(--qb-green-dark);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
+  z-index: 3;
+  flex-shrink: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  box-shadow: 0 1px 4px rgba(26, 35, 48, 0.12);
 }
 
+.zona-sheet__close:active {
+  background: rgba(82, 173, 75, 0.16);
+}
+
+.zona-sheet__close-x {
+  font-size: 1.65rem;
+  line-height: 1;
+  font-weight: 500;
+  color: var(--qb-green-dark);
+  pointer-events: none;
+  margin-top: -2px;
+}
+
+.zona-sheet__close svg,
 .zona-sheet__close .icon {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
+  display: block;
+  flex-shrink: 0;
+  pointer-events: none;
+  stroke: var(--qb-green-dark);
 }
 
 .zona-search-wrap {
@@ -1919,6 +1951,11 @@ body.modal-open {
   color: var(--qb-green-dark);
   border-color: rgba(82, 173, 75, 0.45);
   text-align: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  pointer-events: auto;
+  position: relative;
+  z-index: 2;
 }
 
 .field-row .btn--pick-compact.btn--pick-filled {
