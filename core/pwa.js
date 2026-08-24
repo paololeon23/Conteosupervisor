@@ -1,6 +1,6 @@
 import { toast, openModalElement, closeModalElement, $ } from './utils.js';
 
-const CACHE_NAME = 'qb-conteo-v3.1.2';
+const CACHE_NAME = 'qb-conteo-v3.2.8';
 const INSTALL_DISMISS_KEY = 'qb_install_banner_dismiss';
 
 let swReloadPending = false;
@@ -35,7 +35,6 @@ export async function ensureOfflineReady() {
 
     await waitWithTimeout(navigator.serviceWorker.ready, 6000);
     reg.active?.postMessage({ type: 'WARM' });
-    await new Promise((r) => setTimeout(r, 400));
 
     const cache = await caches.open(CACHE_NAME);
     return Boolean(await cache.match('/index.html'));

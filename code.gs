@@ -43,8 +43,12 @@
 
       if (action === 'ping') return { ok: true, message: 'pong' };
       if (action === 'guardar') return guardar_(body.data || body);
+      if (action === 'dashboard') {
+        var fechaDash = body.fecha || param_(e, 'fecha') || '';
+        return dashboard_(fechaDash);
+      }
 
-      return { ok: false, message: 'Acción no válida. Use: ping o guardar' };
+      return { ok: false, message: 'Acción no válida. Use: ping, guardar o dashboard' };
     } catch (err) {
       return { ok: false, message: String(err.message || err) };
     }
@@ -126,6 +130,7 @@
       }
 
       if (localId) marcarGuardado_(localId);
+      invalidarDashboardCache_();
 
       return {
         ok: true,
@@ -145,6 +150,196 @@
 
   function marcarGuardado_(localId) {
     CacheService.getScriptCache().put('lid_' + localId, '1', 21600);
+  }
+
+  /**
+   * Resumen desde Sheet (rápido):
+   * - Cache servidor ~90s por fecha
+   * - Filas PERSONAL → roles (col K=Cosechadores …)
+   * - Filas ZONA → personas por zona
+   * fecha vacío = hoy; "all" = todas las fechas
+   */
+  function dashboard_(fechaFiltro) {
+    var filtro = String(fechaFiltro || '').trim();
+    if (!filtro) filtro = hoy_();
+    var todas = filtro.toLowerCase() === 'all' || filtro === '*';
+    var cacheKey = 'dash_v2_' + (todas ? 'all' : filtro);
+
+    var cache = CacheService.getScriptCache();
+    try {
+      var cached = cache.get(cacheKey);
+      if (cached) {
+        var parsed = JSON.parse(cached);
+        if (parsed && parsed.ok) {
+          parsed.fromCache = true;
+          return parsed;
+        }
+      }
+    } catch (e) { /* sin cache */ }
+
+    var hoja = obtenerHoja_();
+    var lastRow = hoja.getLastRow();
+    if (lastRow < 2) {
+      var vacio = {
+        ok: true,
+        fecha: todas ? 'all' : filtro,
+        totales: vaciosTotales_(),
+        supervisores: [],
+        zonas: [],
+        conteos: 0,
+        generatedAt: new Date().toISOString()
+      };
+      try { cache.put(cacheKey, JSON.stringify(vacio), 90); } catch (e2) {}
+      return vacio;
+    }
+
+    // Solo columnas usadas: B..Q (2..17) = índices 1..16 en array 0-based de getRange col 2
+    // Leemos A..R completo una sola vez (rápido en Sheets)
+    var data = hoja.getRange(2, 1, lastRow, COLUMNAS.length).getValues();
+
+    var bySup = {};
+    var byZona = {};
+    var totales = vaciosTotales_();
+    var conteos = 0;
+
+    for (var i = 0; i < data.length; i++) {
+      var row = data[i];
+      var tipo = String(row[7] || '').trim().toUpperCase();
+      if (tipo !== 'PERSONAL' && tipo !== 'ZONA') continue;
+
+      var fecha = normalizarFecha_(row[3]);
+      if (!todas && fecha !== filtro) continue;
+
+      if (tipo === 'PERSONAL') {
+        var nombre = String(row[2] || '').trim().toUpperCase() || 'SIN NOMBRE';
+        var cos = num_(row[10]);
+        var esc = num_(row[11]);
+        var cal = num_(row[12]);
+        var supC = num_(row[13]);
+        var tot = num_(row[14]) || (cos + esc + cal + supC);
+        var grupo = String(row[1] || '').trim();
+
+        if (!bySup[nombre]) {
+          bySup[nombre] = {
+            supervisor: nombre,
+            cosechadores: 0,
+            escaner: 0,
+            calidad: 0,
+            supervisorCount: 0,
+            total: 0,
+            conteos: 0,
+            grupos: {}
+          };
+        }
+        var s = bySup[nombre];
+        s.cosechadores += cos;
+        s.escaner += esc;
+        s.calidad += cal;
+        s.supervisorCount += supC;
+        s.total += tot;
+        s.conteos += 1;
+        if (grupo) s.grupos[grupo] = true;
+
+        totales.cosechadores += cos;
+        totales.escaner += esc;
+        totales.calidad += cal;
+        totales.supervisorCount += supC;
+        totales.total += tot;
+        totales.almuerzos += num_(row[15]);
+        totales.permisos += num_(row[16]);
+        totales.faltas += num_(row[17]);
+        conteos += 1;
+      } else {
+        var zona = String(row[8] || '').trim().toUpperCase();
+        var cant = num_(row[9]);
+        if (!zona || cant <= 0) continue;
+        byZona[zona] = (byZona[zona] || 0) + cant;
+      }
+    }
+
+    var supervisores = [];
+    for (var key in bySup) {
+      if (!bySup.hasOwnProperty(key)) continue;
+      var item = bySup[key];
+      var nGrupos = 0;
+      for (var g in item.grupos) {
+        if (item.grupos.hasOwnProperty(g)) nGrupos++;
+      }
+      supervisores.push({
+        supervisor: item.supervisor,
+        cosechadores: item.cosechadores,
+        escaner: item.escaner,
+        calidad: item.calidad,
+        supervisorCount: item.supervisorCount,
+        total: item.total,
+        conteos: item.conteos,
+        grupos: nGrupos
+      });
+    }
+    supervisores.sort(function (a, b) {
+      return b.cosechadores - a.cosechadores || b.total - a.total;
+    });
+
+    var zonas = [];
+    for (var z in byZona) {
+      if (!byZona.hasOwnProperty(z)) continue;
+      zonas.push({ zona: z, cantidad: byZona[z] });
+    }
+    zonas.sort(function (a, b) {
+      return b.cantidad - a.cantidad;
+    });
+
+    totales.supervisoresUnicos = supervisores.length;
+    totales.conteos = conteos;
+
+    var result = {
+      ok: true,
+      fecha: todas ? 'all' : filtro,
+      totales: totales,
+      supervisores: supervisores,
+      zonas: zonas,
+      conteos: conteos,
+      generatedAt: new Date().toISOString(),
+      fromCache: false
+    };
+
+    try {
+      cache.put(cacheKey, JSON.stringify(result), 90);
+    } catch (e3) { /* payload grande */ }
+
+    return result;
+  }
+
+  function invalidarDashboardCache_() {
+    try {
+      var cache = CacheService.getScriptCache();
+      cache.remove('dash_v2_' + hoy_());
+      cache.remove('dash_v2_all');
+    } catch (e) { /* ok */ }
+  }
+
+  function vaciosTotales_() {
+    return {
+      cosechadores: 0,
+      escaner: 0,
+      calidad: 0,
+      supervisorCount: 0,
+      total: 0,
+      almuerzos: 0,
+      permisos: 0,
+      faltas: 0,
+      supervisoresUnicos: 0,
+      conteos: 0
+    };
+  }
+
+  function normalizarFecha_(v) {
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      return Utilities.formatDate(v, TZ, 'yyyy-MM-dd');
+    }
+    var s = String(v || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    return s;
   }
 
   function fila_(base, tipo, zona, cantidad, extra) {

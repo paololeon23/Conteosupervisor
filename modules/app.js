@@ -4,8 +4,37 @@ import { dedupeQueue, flushPendingQueue, isFlushBlocked } from '../core/save-con
 import { restoreBorradorFromIDB } from '../core/draft.js';
 import { isOnline, updateNetBadge, initStatusPills } from '../core/network.js';
 import { initConteo } from './conteo/conteo.js';
-import { initHistorial } from './historial/historial.js';
 import { toast, resetBodyScrollLock, closeAllModals } from '../core/utils.js';
+
+let historialReady = false;
+let dataReady = false;
+
+async function ensureHistorial() {
+  if (historialReady) return;
+  const { initHistorial } = await import('./historial/historial.js');
+  initHistorial();
+  historialReady = true;
+}
+
+async function ensureData() {
+  if (dataReady) {
+    const { initData } = await import('./data/data.js');
+    initData();
+    return;
+  }
+  const { initData } = await import('./data/data.js');
+  initData();
+  dataReady = true;
+}
+
+function goHistorial() {
+  ensureHistorial().then(() => switchTab('historial'));
+}
+
+function goData() {
+  switchTab('data');
+  ensureData();
+}
 
 async function init() {
   closeAllModals();
@@ -13,17 +42,15 @@ async function init() {
 
   // UI primero — los clics no deben esperar al service worker
   initTabs();
-  initStatusPills(() => switchTab('historial'));
+  initStatusPills(goHistorial);
   initAppRefresh();
   initInstallPrompt();
   registerSW();
 
   try {
-    await restoreFromIDB();
+    await Promise.all([restoreFromIDB(), restoreBorradorFromIDB()]);
     dedupeQueue();
-    await restoreBorradorFromIDB();
     await initConteo();
-    initHistorial();
     updateNetBadge();
 
     window.addEventListener('online', onReconnect);
@@ -54,7 +81,12 @@ function switchTab(tab) {
 
 function initTabs() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      if (tab === 'historial') goHistorial();
+      else if (tab === 'data') goData();
+      else switchTab(tab);
+    });
   });
 }
 

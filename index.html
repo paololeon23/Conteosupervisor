@@ -18,6 +18,7 @@
   <link rel="apple-touch-icon" href="/assets/icon-192.png" sizes="192x192">
   <link rel="apple-touch-icon" sizes="512x512" href="/assets/icon-512.png">
   <link rel="stylesheet" href="/css/app.css">
+  <link rel="modulepreload" href="/modules/app.js">
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/service-worker.js', { scope: '/', updateViaCache: 'none' }).catch(function () {});
@@ -77,6 +78,7 @@
 
     <nav class="tabs" role="tablist">
       <button class="tab-btn tab-btn--active" data-tab="conteo" role="tab">Conteo</button>
+      <button class="tab-btn" data-tab="data" role="tab">Ver data</button>
       <button class="tab-btn" data-tab="historial" role="tab">Historial</button>
     </nav>
 
@@ -97,7 +99,7 @@
             </div>
             <div class="field">
               <label>Fecha</label>
-              <button type="button" id="btn-pick-fecha" class="btn btn--zona btn--pick-compact">
+              <button type="button" id="btn-pick-fecha" class="btn btn--zona btn--pick-compact btn--pick-filled btn--fecha-locked" disabled aria-disabled="true" title="Fecha del día (fija)">
                 <span id="fecha-label">Elegir fecha</span>
               </button>
               <input type="hidden" id="fecha" required>
@@ -196,6 +198,32 @@
       </form>
     </section>
 
+    <section id="tab-data" class="tab-panel" role="tabpanel">
+      <div class="data-panel">
+        <div class="data-toolbar">
+          <div class="data-toolbar__filters">
+            <button type="button" id="btn-data-hoy" class="data-filter is-active">Hoy</button>
+            <button type="button" id="btn-data-all" class="data-filter">Todo</button>
+          </div>
+          <div class="data-toolbar__right">
+            <span id="data-status" class="data-status">—</span>
+            <button type="button" id="btn-data-refresh" class="data-refresh" aria-label="Actualizar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+                <path d="M16 16h5v5"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+          <button type="button" id="btn-ver-resumen-data" class="btn btn--primary btn--save data-resumen-btn">
+          Ver resumen
+        </button>
+        <div id="data-root" class="data-root"></div>
+      </div>
+    </section>
+
     <section id="tab-historial" class="tab-panel" role="tabpanel">
       <div class="historial-panel">
         <div class="historial-header">
@@ -257,6 +285,53 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Modal detalle Ver data -->
+  <div id="data-detail-modal" class="modal zona-modal data-detail-modal" aria-hidden="true" role="dialog" aria-label="Detalle de datos">
+    <div class="zona-sheet data-detail-sheet">
+      <div class="zona-sheet__head">
+        <h3 id="data-detail-title">Detalle</h3>
+        <button type="button" id="data-detail-close" class="zona-sheet__close" aria-label="Cerrar">
+          <span class="zona-sheet__close-x" aria-hidden="true">×</span>
+        </button>
+      </div>
+      <div id="data-detail-body" class="data-detail-body"></div>
+    </div>
+  </div>
+
+  <!-- Lista supervisores → resumen imagen -->
+  <div id="sup-resumen-modal" class="modal zona-modal" aria-hidden="true" role="dialog" aria-label="Resumen por supervisor">
+    <div class="zona-sheet data-detail-sheet">
+      <div class="zona-sheet__head">
+        <h3>Resumen por supervisor</h3>
+        <button type="button" id="sup-resumen-close" class="zona-sheet__close" aria-label="Cerrar">
+          <span class="zona-sheet__close-x" aria-hidden="true">×</span>
+        </button>
+      </div>
+      <p id="sup-resumen-meta" class="sup-resumen-meta"></p>
+      <div id="sup-resumen-list" class="sup-resumen-list"></div>
+    </div>
+  </div>
+
+  <!-- Preview imagen supervisor -->
+  <div id="sup-preview-modal" class="modal zona-modal" aria-hidden="true" role="dialog" aria-label="Imagen resumen">
+    <div class="zona-sheet sup-preview-sheet">
+      <div class="zona-sheet__head">
+        <h3 id="sup-preview-title">Resumen</h3>
+        <button type="button" id="sup-preview-close" class="zona-sheet__close" aria-label="Cerrar">
+          <span class="zona-sheet__close-x" aria-hidden="true">×</span>
+        </button>
+      </div>
+      <div class="sup-preview-body">
+        <img id="sup-preview-img" class="sup-preview-img" alt="Resumen supervisor">
+        <p class="sup-preview-hint">Comparta la imagen por WhatsApp o guárdela en el celular</p>
+        <div class="sup-preview-actions">
+          <button type="button" id="sup-preview-download" class="btn btn--ghost">Guardar</button>
+          <button type="button" id="sup-preview-share" class="btn btn--primary btn--save">Compartir</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal calendario fecha -->
   <div id="fecha-modal" class="modal zona-modal date-modal" aria-hidden="true" role="dialog" aria-label="Seleccionar fecha">

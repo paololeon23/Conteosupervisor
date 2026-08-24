@@ -149,12 +149,8 @@ function renderCalendar() {
 }
 
 export function openDatePicker() {
-  const modal = $('#fecha-modal');
-  if (!modal) return;
-
-  syncViewToSelection();
-  renderCalendar();
-  openModalElement(modal);
+  // Fecha fija del día — no se abre el calendario
+  return;
 }
 
 export function closeDatePicker() {

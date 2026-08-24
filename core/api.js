@@ -34,6 +34,14 @@ export async function guardarConteo(data) {
   return callScript('guardar', data);
 }
 
+export async function obtenerDashboard(fecha) {
+  // GET es más rápido que POST para leer resumen
+  return callScriptGet({
+    action: 'dashboard',
+    fecha: fecha || ''
+  });
+}
+
 export async function pingConteo() {
   return callScriptGet({ action: 'ping' });
 }

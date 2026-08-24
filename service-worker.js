@@ -1,4 +1,4 @@
-const CACHE = 'qb-conteo-v3.1.2';
+const CACHE = 'qb-conteo-v3.2.8';
 
 const ASSETS = [
   '/index.html',
@@ -6,6 +6,7 @@ const ASSETS = [
   '/modules/app.js',
   '/modules/conteo/conteo.js',
   '/modules/historial/historial.js',
+  '/modules/data/data.js',
   '/core/api-config.js',
   '/core/utils.js',
   '/core/network.js',
@@ -20,6 +21,7 @@ const ASSETS = [
   '/core/zona-select.js',
   '/core/comprobante.js',
   '/core/save-conteo.js',
+  '/core/sup-resumen.js',
   '/core/totals.js',
   '/core/icons.js',
   '/core/pwa.js',
@@ -45,14 +47,18 @@ function isHtmlRequest(request) {
   return accept.includes('text/html');
 }
 
+/** Clonar en cada put — un Response solo se puede leer una vez */
 async function cacheShell(cache) {
   const index = await cache.match('/index.html');
   if (!index) return;
-  await cache.put('/', index);
-  await cache.put('/index.html', index);
-  const scope = self.registration?.scope || self.location.origin + '/';
-  await cache.put(scope, index);
-  await cache.put(scope + 'index.html', index);
+
+  const scope = self.registration?.scope || (self.location.origin + '/');
+  const urls = ['/', '/index.html', scope, scope + 'index.html'];
+  const unique = [...new Set(urls.filter(Boolean))];
+
+  await Promise.all(
+    unique.map((url) => cache.put(url, index.clone()).catch(() => {}))
+  );
 }
 
 async function precacheAll() {
@@ -140,13 +146,7 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(request.url);
 
   if (url.origin !== self.location.origin) {
-    if (url.hostname.includes('script.google.com')) {
-      e.respondWith(
-        fetch(request).catch(() => new Response('{"ok":false,"offline":true}', {
-          headers: { 'Content-Type': 'application/json' }
-        }))
-      );
-    }
+    // Apps Script: no interceptar (el cliente maneja cache local del dashboard)
     return;
   }
 

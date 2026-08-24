@@ -5,7 +5,7 @@ import { openZonaSelect, initZonaSelect, SVG_X } from '../../core/zona-select.js
 import { openLoteSelect, initLoteSelect, aplicarLote, resetLote } from '../../core/lote-select.js';
 import { openGrupoSelect, initGrupoSelect, aplicarGrupo, resetGrupo } from '../../core/grupo-select.js';
 import { preloadLicapa } from '../../core/licapa-data.js';
-import { initDatePicker, openDatePicker, setFecha, getFecha } from '../../core/date-picker.js';
+import { initDatePicker, setFecha, getFecha } from '../../core/date-picker.js';
 import { initComprobante, openComprobantePreview } from '../../core/comprobante.js';
 import { addCustomZona, validarZona } from '../../core/zonas-catalog.js';
 import { todayStr, nowTimeStr, toast, debounce, $ } from '../../core/utils.js';
@@ -163,7 +163,8 @@ function restaurarBorrador() {
   }
 
   if ($('#supervisor') && b.supervisor) $('#supervisor').value = b.supervisor;
-  if (b.fecha) setFecha(b.fecha, { silent: true });
+  // Fecha siempre del día — no se restaura del borrador
+  setFecha(todayStr(), { silent: true });
 
   if (b.roles) {
     ROLES.forEach(r => {
@@ -318,19 +319,24 @@ function getPayload(extra = {}) {
 }
 
 export async function initConteo() {
-  await preloadLicapa();
   renderRoles();
-  await initLoteSelect();
-  await initGrupoSelect();
   initZonaSelect();
   initDatePicker(() => saveDraftDebounced());
   bindEvents();
   initComprobante({ onGuardar: guardarDesdeResumen });
-  restaurarBorrador();
-  if (!getFecha()) setFecha(todayStr(), { silent: true });
+  setFecha(todayStr(), { silent: true });
   renderZonasList();
   bindLiveTotals();
   updateTotals();
+
+  await Promise.all([
+    preloadLicapa(),
+    initLoteSelect(),
+    initGrupoSelect()
+  ]);
+
+  restaurarBorrador();
+  setFecha(todayStr(), { silent: true });
 }
 
 function bindLiveTotals() {
@@ -374,11 +380,6 @@ function bindEvents() {
   });
   $('#btn-pick-grupo')?.addEventListener('click', () => {
     openGrupoSelect((label) => { aplicarGrupo(label); saveDraftDebounced(); });
-  });
-  $('#btn-pick-fecha')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openDatePicker();
   });
   $('#btn-pick-lote')?.addEventListener('click', () => {
     openLoteSelect((item) => { aplicarLote(item); saveDraftDebounced(); });

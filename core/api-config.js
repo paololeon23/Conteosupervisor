@@ -7,7 +7,8 @@ export const SCRIPT = {
 export const STORAGE_KEYS = {
   QUEUE: 'qb_conteo_queue_v1',
   HISTORIAL: 'qb_conteo_historial_v1',
-  BORRADOR: 'qb_conteo_borrador_v1'
+  BORRADOR: 'qb_conteo_borrador_v1',
+  DASHBOARD: 'qb_conteo_dashboard_v1'
 };
 
 export const APP_VERSION = '1.0.0';
