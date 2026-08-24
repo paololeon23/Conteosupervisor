@@ -52,10 +52,12 @@ function buildComprobanteHtml(data, mode) {
   `).join('');
 
   let statusClass = 'comp-status--preview';
-  let statusLabel = 'Resumen — revise antes de guardar';
+  let statusLabel = data.editar
+    ? 'Resumen — revise antes de actualizar'
+    : 'Resumen — revise antes de guardar';
   if (mode === 'synced') {
     statusClass = 'comp-status--ok';
-    statusLabel = 'Enviado';
+    statusLabel = data.editar ? 'Actualizado' : 'Enviado';
   } else if (mode === 'pending') {
     statusClass = 'comp-status--pending';
     statusLabel = 'Pendiente de envío';
@@ -142,14 +144,18 @@ function buildComprobanteHtml(data, mode) {
 }
 
 const BTN_GUARDAR_LABEL = 'Guardar conteo';
+const BTN_ACTUALIZAR_LABEL = 'Actualizar conteo';
 const BTN_GUARDANDO_LABEL = 'Guardando, espere por favor';
 
 function setGuardarButtonLoading(loading) {
   const btn = $('#comprobante-guardar');
   const back = $('#comprobante-back');
+  const edit = Boolean(pendingPayload?.editar);
   if (btn) {
     btn.disabled = loading;
-    btn.textContent = loading ? BTN_GUARDANDO_LABEL : BTN_GUARDAR_LABEL;
+    btn.textContent = loading
+      ? BTN_GUARDANDO_LABEL
+      : (edit ? BTN_ACTUALIZAR_LABEL : BTN_GUARDAR_LABEL);
     btn.setAttribute('aria-busy', loading ? 'true' : 'false');
   }
   if (back) back.disabled = loading;
@@ -182,6 +188,12 @@ export function openComprobantePreview(data) {
   renderSheet(data, 'preview');
   setFootMode('preview');
   setGuardarButtonLoading(false);
+  const hint = $('#comprobante-hint-preview');
+  if (hint) {
+    hint.textContent = data.editar
+      ? 'Ya marcó hoy — al guardar se actualiza en el servidor'
+      : 'Revise y confirme para guardar';
+  }
   openModal();
 }
 

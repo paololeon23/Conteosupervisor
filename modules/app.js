@@ -88,6 +88,14 @@ function initTabs() {
       else switchTab(tab);
     });
   });
+
+  window.addEventListener('app:goto-tab', (e) => {
+    const tab = e.detail?.tab;
+    if (!tab) return;
+    if (tab === 'historial') goHistorial();
+    else if (tab === 'data') goData();
+    else switchTab(tab);
+  });
 }
 
 async function onReconnect() {

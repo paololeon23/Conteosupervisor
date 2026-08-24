@@ -34,6 +34,10 @@ export async function guardarConteo(data) {
   return callScript('guardar', data);
 }
 
+export async function consultarConteo(data) {
+  return callScript('consultar', data);
+}
+
 export async function obtenerDashboard(fecha) {
   // GET es más rápido que POST para leer resumen
   return callScriptGet({

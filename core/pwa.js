@@ -1,6 +1,6 @@
 import { toast, openModalElement, closeModalElement, $ } from './utils.js';
 
-const CACHE_NAME = 'qb-conteo-v3.2.8';
+const CACHE_NAME = 'qb-conteo-v3.5.5';
 const INSTALL_DISMISS_KEY = 'qb_install_banner_dismiss';
 
 let swReloadPending = false;

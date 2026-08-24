@@ -1,4 +1,4 @@
-const CACHE = 'qb-conteo-v3.2.8';
+const CACHE = 'qb-conteo-v3.5.5';
 
 const ASSETS = [
   '/index.html',
@@ -19,9 +19,12 @@ const ASSETS = [
   '/core/date-picker.js',
   '/core/zonas-catalog.js',
   '/core/zona-select.js',
+  '/core/supervisores-catalog.js',
+  '/core/supervisor-select.js',
   '/core/comprobante.js',
   '/core/save-conteo.js',
   '/core/sup-resumen.js',
+  '/core/export-excel.js',
   '/core/totals.js',
   '/core/icons.js',
   '/core/pwa.js',

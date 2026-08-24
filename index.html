@@ -106,8 +106,12 @@
             </div>
           </div>
           <div class="field">
-            <label for="supervisor">Supervisor</label>
-            <input type="text" id="supervisor" placeholder="Nombre del supervisor" required>
+            <label for="supervisor-dni">DNI supervisor</label>
+            <input type="text" id="supervisor-dni" inputmode="numeric" maxlength="9" placeholder="Ingrese su DNI" autocomplete="off" required>
+            <input type="hidden" id="codSupervisor">
+            <input type="hidden" id="supervisor">
+            <p id="supervisor-nombre" class="pick-preview" hidden></p>
+            <p id="supervisor-estado" class="sup-estado" hidden></p>
           </div>
           <div class="field">
             <label>Lote</label>
@@ -201,9 +205,14 @@
     <section id="tab-data" class="tab-panel" role="tabpanel">
       <div class="data-panel">
         <div class="data-toolbar">
-          <div class="data-toolbar__filters">
-            <button type="button" id="btn-data-hoy" class="data-filter is-active">Hoy</button>
-            <button type="button" id="btn-data-all" class="data-filter">Todo</button>
+          <div class="data-toolbar__left">
+            <div class="data-toolbar__filters">
+              <button type="button" id="btn-data-hoy" class="data-filter is-active">Hoy</button>
+              <button type="button" id="btn-data-all" class="data-filter">Todo</button>
+            </div>
+            <button type="button" id="btn-data-faltan" class="data-faltan" hidden aria-label="Validar supervisores">
+              Validar <strong id="data-faltan-count">0</strong>
+            </button>
           </div>
           <div class="data-toolbar__right">
             <span id="data-status" class="data-status">—</span>
@@ -218,8 +227,8 @@
           </div>
         </div>
           <button type="button" id="btn-ver-resumen-data" class="btn btn--primary btn--save data-resumen-btn">
-          Ver resumen
-        </button>
+            Ver resumen
+          </button>
         <div id="data-root" class="data-root"></div>
       </div>
     </section>

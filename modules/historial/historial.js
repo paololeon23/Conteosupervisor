@@ -1,7 +1,9 @@
 import { HISTORIAL_TTL_MS } from '../../core/api-config.js';
 import { getHistorial, saveHistorial } from '../../core/offline-queue.js';
-import { formatFechaLima, formatHora, $ } from '../../core/utils.js';
+import { formatFechaLima, formatHora, $, toast } from '../../core/utils.js';
 import { iconLabel } from '../../core/icons.js';
+import { limpiarDni, extraerDni, nombreVisible } from '../../core/supervisores-catalog.js';
+import { cargarConteoParaEditar } from '../conteo/conteo.js';
 
 const PAGE_SIZE = 5;
 let currentPage = 1;
@@ -56,7 +58,27 @@ export function render() {
   const pageItems = list.slice(start, start + PAGE_SIZE);
 
   container.innerHTML = pageItems.map(item => cardHtml(item)).join('');
+  bindCardActions(pageItems);
   updatePager(list.length, totalPages);
+}
+
+function bindCardActions(pageItems) {
+  document.querySelectorAll('[data-hist-edit]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-hist-edit');
+      // Solo lo que está en el historial de ESTE celular
+      const item = getHistorial().find((h) => String(h.localId) === id);
+      if (!item) {
+        toast('Solo puede editar lo enviado desde este celular', 'error');
+        return;
+      }
+      // Preferir el de la página actual (misma referencia)
+      const fromPage = pageItems.find((h) => String(h.localId) === id) || item;
+      const ok = cargarConteoParaEditar(fromPage);
+      if (!ok) return;
+      window.dispatchEvent(new CustomEvent('app:goto-tab', { detail: { tab: 'conteo' } }));
+    });
+  });
 }
 
 function updatePager(total, totalPages) {
@@ -87,6 +109,9 @@ function cardHtml(item) {
     .join(' · ');
 
   const grupo = item.grupoLabel || `Grupo ${item.grupoCosecha}`;
+  const dni = limpiarDni(item.codSupervisor) || extraerDni(item.supervisor);
+  const nombre = nombreVisible(item.supervisor) || item.supervisor || '—';
+  const canEdit = Boolean(item.localId && dni);
 
   return `
     <article class="hist-card ${synced ? 'hist-card--synced' : 'hist-card--pending'}">
@@ -100,7 +125,7 @@ function cardHtml(item) {
         <span class="hist-tag">Mód. ${item.modulo}</span>
         <span class="hist-tag">T${item.turno}</span>
       </div>
-      <p class="hist-card__supervisor">${item.supervisor}</p>
+      <p class="hist-card__supervisor">${nombre}${dni ? ` · ${dni}` : ''}</p>
       <div class="hist-card__stats">
         ${iconLabel('users', String(item.totalPersonal), 'hist-stat')}
         ${iconLabel('utensils', String(item.almuerzos), 'hist-stat hist-stat--alm')}
@@ -108,7 +133,19 @@ function cardHtml(item) {
         ${iconLabel('user-x', String(item.faltas), 'hist-stat hist-stat--falt')}
       </div>
       ${zonasTxt ? `<div class="hist-card__zonas"><span class="hist-card__zonas-label">Zonas</span><p>${zonasTxt}</p></div>` : ''}
+      ${canEdit ? `
+        <button type="button" class="hist-card__edit" data-hist-edit="${escAttr(item.localId)}">
+          Editar
+        </button>
+      ` : ''}
     </article>`;
+}
+
+function escAttr(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;');
 }
 
 function purgeOld() {

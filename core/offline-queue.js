@@ -53,8 +53,12 @@ export function getQueue() {
   return lsGet(STORAGE_KEYS.QUEUE, []);
 }
 
-/** Una sola clave por grupo + fecha (un conteo por día y grupo) */
+/** Una sola clave por DNI supervisor + fecha */
 export function conteoKey(d) {
+  const dni = String(d.codSupervisor || '').replace(/\D/g, '')
+    || String(d.supervisor || '').match(/^(\d{8,9})\b/)?.[1]
+    || '';
+  if (dni) return `${dni}|${d.fecha}`;
   return `${d.grupoCosecha}|${d.fecha}`;
 }
 
@@ -65,8 +69,17 @@ export function saveQueue(queue) {
 export function enqueue(item) {
   const queue = getQueue();
   const key = conteoKey(item);
-  if (queue.some(q => q.localId === item.localId || conteoKey(q) === key)) {
-    return queue.find(q => q.localId === item.localId || conteoKey(q) === key);
+  const idx = queue.findIndex(q => q.localId === item.localId || conteoKey(q) === key);
+  if (idx >= 0) {
+    queue[idx] = {
+      ...queue[idx],
+      ...item,
+      localId: queue[idx].localId || item.localId || uid(),
+      queuedAt: Date.now(),
+      status: 'pending'
+    };
+    saveQueue(queue);
+    return queue[idx];
   }
   const entry = { ...item, localId: item.localId || uid(), queuedAt: Date.now(), status: 'pending' };
   queue.push(entry);

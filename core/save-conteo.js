@@ -35,7 +35,7 @@ export function conteoYaRegistrado(data) {
   return enCola || enHistorial;
 }
 
-/** Quita entradas repetidas en la cola (mismo grupo + fecha) */
+/** Quita entradas repetidas en la cola (mismo DNI + fecha) */
 export function dedupeQueue() {
   const queue = getQueue();
   const seen = new Map();
@@ -53,16 +53,17 @@ export function dedupeQueue() {
 }
 
 function guardarLocal(data) {
-  const key = conteoKey(data);
-  let entry = getQueue().find(q => conteoKey(q) === key);
-  if (!entry) entry = enqueue(data);
+  const entry = enqueue(data);
 
   const historial = getHistorial();
-  const existe = historial.some(h => conteoKey(h) === key && h.status !== 'failed');
-  if (!existe) {
+  const key = conteoKey(data);
+  const idx = historial.findIndex(h => conteoKey(h) === key && h.status !== 'failed');
+  if (idx >= 0) {
+    historial[idx] = { ...historial[idx], ...entry, status: 'pending' };
+  } else {
     historial.unshift({ ...entry, status: 'pending' });
-    saveHistorial(historial);
   }
+  saveHistorial(historial);
 
   return entry;
 }
@@ -74,7 +75,7 @@ function marcarSincronizado(data) {
   const historial = getHistorial();
   const key = conteoKey(data);
   const idx = historial.findIndex(h => h.localId === data.localId || conteoKey(h) === key);
-  const patch = { status: 'synced', syncedAt: Date.now() };
+  const patch = { status: 'synced', syncedAt: Date.now(), ...data };
 
   if (idx >= 0) {
     historial[idx] = { ...historial[idx], ...patch };
@@ -85,14 +86,18 @@ function marcarSincronizado(data) {
 }
 
 /**
- * Guarda un conteo: online → servidor; sin internet → solo celular (una sola vez).
+ * Guarda o actualiza un conteo: online → servidor; sin internet → celular.
+ * @param {object} payload
+ * @param {{ editar?: boolean }} [opts]
  */
-export async function persistConteo(payload) {
+export async function persistConteo(payload, opts = {}) {
   if (saveInFlight) return { saved: false };
 
-  const data = prepareData(payload);
-  if (conteoYaRegistrado(data)) {
-    toast('Ya hay conteo para este grupo y fecha', 'warn');
+  const editar = Boolean(opts.editar || payload.editar);
+  const data = prepareData({ ...payload, editar });
+
+  if (!editar && conteoYaRegistrado(data)) {
+    toast('Este DNI ya tiene conteo hoy — edite e actualice', 'warn');
     return { saved: false };
   }
 
@@ -103,9 +108,11 @@ export async function persistConteo(payload) {
 
     if (!puedeEnviar) {
       const entry = guardarLocal(data);
-      toast('Guardado en el celular — se envía al tener internet', 'info');
+      toast(editar
+        ? 'Actualizado en el celular — se envía al tener internet'
+        : 'Guardado en el celular — se envía al tener internet', 'info');
       window.dispatchEvent(new CustomEvent('historial:update'));
-      return { saved: true, synced: false, payload: entry };
+      return { saved: true, synced: false, payload: entry, updated: editar };
     }
 
     const resp = await guardarConteo(data);
@@ -116,20 +123,20 @@ export async function persistConteo(payload) {
 
     if (isConteoSuccess(resp)) {
       marcarSincronizado(data);
-      toast('Conteo enviado', 'success');
+      toast((resp.updated || editar) ? 'Conteo actualizado en el servidor' : 'Conteo enviado', 'success');
       window.dispatchEvent(new CustomEvent('historial:update'));
-      return { saved: true, synced: true, payload: data };
+      return { saved: true, synced: true, payload: data, updated: Boolean(resp.updated || editar) };
     }
 
     const entry = guardarLocal(data);
     toast('No se pudo enviar — guardado en el celular', 'warn');
     window.dispatchEvent(new CustomEvent('historial:update'));
-    return { saved: true, synced: false, payload: entry };
+    return { saved: true, synced: false, payload: entry, updated: editar };
   } catch {
     const entry = guardarLocal(data);
     toast('Sin conexión — guardado en el celular', 'warn');
     window.dispatchEvent(new CustomEvent('historial:update'));
-    return { saved: true, synced: false, payload: entry };
+    return { saved: true, synced: false, payload: entry, updated: editar };
   } finally {
     saveInFlight = false;
   }
@@ -161,17 +168,9 @@ export async function flushPendingQueue() {
 
       if (sendingIds.has(item.localId)) continue;
 
-      const yaSync = getHistorial().some(
-        h => (h.localId === item.localId || conteoKey(h) === key) && h.status === 'synced'
-      );
-      if (yaSync) {
-        removeFromQueue(item.localId);
-        continue;
-      }
-
       sendingIds.add(item.localId);
       try {
-        const resp = await guardarConteo(item);
+        const resp = await guardarConteo({ ...item, editar: true });
         if (isAuthError(resp)) {
           flushBlocked = true;
           toast('Sync detenido — error de autorización', 'error');

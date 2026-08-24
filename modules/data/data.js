@@ -3,6 +3,14 @@ import { isOnline } from '../../core/network.js';
 import { STORAGE_KEYS } from '../../core/api-config.js';
 import { todayStr, toast, $, formatFechaLima, openModalElement, closeModalElement } from '../../core/utils.js';
 import { initSupResumen, openSupResumenList } from '../../core/sup-resumen.js';
+import {
+  supervisoresFaltantes,
+  validarSupervisores,
+  nombreVisible,
+  extraerDni,
+  matchSupervisorFijo
+} from '../../core/supervisores-catalog.js';
+import { descargarExcelSeccion } from '../../core/export-excel.js';
 
 let bound = false;
 let loading = false;
@@ -10,6 +18,8 @@ let loading = false;
 let modoFecha = 'hoy';
 /** @type {object|null} */
 let lastData = null;
+/** @type {string[]} */
+let lastFaltan = [];
 
 const ROLE_COLORS = {
   cosechadores: '#52AD4B',
@@ -45,6 +55,7 @@ function applyData(resp, statusLabel) {
   lastData = resp;
   render(resp);
   bindChartClicks();
+  updateFaltanUI(resp);
   const status = $('#data-status');
   if (status) {
     const fechaTxt = resp.fecha === 'all'
@@ -52,6 +63,87 @@ function applyData(resp, statusLabel) {
       : (formatFechaLima(resp.fecha) || resp.fecha);
     status.textContent = statusLabel ? `${fechaTxt} · ${statusLabel}` : fechaTxt;
   }
+}
+
+function updateFaltanUI(resp) {
+  const reportados = Array.isArray(resp?.supervisores) ? resp.supervisores : [];
+  lastFaltan = supervisoresFaltantes(reportados);
+  const btn = $('#btn-data-faltan');
+  const countEl = $('#data-faltan-count');
+  if (!btn || !countEl) return;
+
+  const n = lastFaltan.length;
+  countEl.textContent = String(n);
+  btn.hidden = false;
+  btn.classList.toggle('data-faltan--ok', n === 0);
+  btn.classList.toggle('data-faltan--warn', n > 0);
+  btn.setAttribute('aria-label', n === 0
+    ? 'Validar: todos reportaron'
+    : `Validar: faltan ${n} supervisores`);
+}
+
+function openFaltanDetalle() {
+  if (!lastData) {
+    toast('Espere a que carguen los datos', 'warn');
+    return;
+  }
+  const reportados = Array.isArray(lastData.supervisores) ? lastData.supervisores : [];
+  const { presentes, faltan, total } = validarSupervisores(reportados);
+  lastFaltan = faltan;
+  const rango = lastData.fecha === 'all' ? 'Todo' : 'Hoy';
+
+  const itemHtml = (s, ok) => `
+    <li class="data-validar-item ${ok ? 'data-validar-item--ok' : 'data-validar-item--faltan'}"
+        data-sup-search="${esc(`${s.dni} ${s.nombre}`)}">
+      <span class="data-validar-badge" aria-hidden="true">${ok ? '✓' : '·'}</span>
+      <div class="data-validar-who">
+        <strong class="data-faltan-dni">${esc(s.dni)}</strong>
+        <span>${esc(s.nombre)}</span>
+      </div>
+      <span class="data-validar-estado">${ok ? 'Reportó' : 'Falta'}</span>
+    </li>`;
+
+  openDetail(`Validar supervisores · ${rango}`, `
+    <div class="dd-toolbar">
+      <div class="dd-stat-row dd-stat-row--grow">
+        <div><span>Lista</span><strong>${total}</strong></div>
+        <div><span>Reportaron</span><strong>${presentes.length}</strong></div>
+        <div><span>Faltan</span><strong>${faltan.length}</strong></div>
+      </div>
+      <button type="button" class="data-card__excel dd-excel-btn" data-excel="faltan">Excel</button>
+    </div>
+    ${searchHtml('Buscar nombre o DNI…')}
+    ${faltan.length ? `
+      <h4 class="dd-section-title dd-section-title--warn">Faltan (${faltan.length})</h4>
+      <ul class="data-faltan-list data-validar-list">
+        ${faltan.map((s) => itemHtml(s, false)).join('')}
+      </ul>
+    ` : `
+      <p class="data-empty__hint data-faltan-ok-msg">Todos los supervisores fijos ya reportaron.</p>
+    `}
+    ${presentes.length ? `
+      <h4 class="dd-section-title dd-section-title--ok">Ya reportaron (${presentes.length})</h4>
+      <ul class="data-faltan-list data-validar-list">
+        ${presentes.map((s) => itemHtml(s, true)).join('')}
+      </ul>
+    ` : `
+      <h4 class="dd-section-title dd-section-title--warn">Ya reportaron (0)</h4>
+      <p class="data-empty__hint">Ningún supervisor fijo aparece en este rango.</p>
+    `}
+    <p id="dd-sup-search-empty" class="data-empty__hint" hidden>Sin coincidencias</p>
+  `);
+  bindDetailSearch();
+  bindDetailExcel();
+}
+
+function labelFromMeta(resp) {
+  if (resp.fromCache) return 'servidor·cache';
+  const meta = resp.meta || {};
+  if (resp.fecha === 'all') {
+    const n = Array.isArray(meta.fechasEncontradas) ? meta.fechasEncontradas.length : 0;
+    return n > 1 ? `${n} fechas` : 'servidor';
+  }
+  return meta.hoyServidor ? `hoy ${meta.hoyServidor}` : 'servidor';
 }
 
 export function initData() {
@@ -65,15 +157,17 @@ export function initData() {
   $('#btn-data-hoy')?.addEventListener('click', () => {
     modoFecha = 'hoy';
     syncFiltroUI();
-    cargar(false);
+    // Siempre pedir al servidor al cambiar filtro (evita cache viejo Hoy ≠ Todo)
+    cargar(true);
   });
   $('#btn-data-all')?.addEventListener('click', () => {
     modoFecha = 'all';
     syncFiltroUI();
-    cargar(false);
+    cargar(true);
   });
   // Solo el botón refresh pide al servidor
   $('#btn-data-refresh')?.addEventListener('click', () => cargar(true));
+  $('#btn-data-faltan')?.addEventListener('click', openFaltanDetalle);
 
   $('#data-detail-close')?.addEventListener('click', closeDetail);
   $('#data-detail-modal')?.addEventListener('click', (e) => {
@@ -108,6 +202,67 @@ function openDetail(title, html) {
   openModalElement($('#data-detail-modal'));
 }
 
+function searchHtml(placeholder) {
+  return `
+    <div class="dd-search-wrap">
+      <span class="dd-search-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+        </svg>
+      </span>
+      <input type="search" id="dd-sup-search" class="dd-search" placeholder="${esc(placeholder)}" autocomplete="off">
+    </div>
+  `;
+}
+
+function bindDetailSearch() {
+  const input = $('#dd-sup-search');
+  if (!input) return;
+  const items = [...document.querySelectorAll('#data-detail-body [data-sup-search]')];
+  const empty = $('#dd-sup-search-empty');
+  const filter = () => {
+    const q = String(input.value || '').trim().toLowerCase();
+    const digits = q.replace(/\D/g, '');
+    let shown = 0;
+    items.forEach((el) => {
+      const hay = String(el.dataset.supSearch || '').toLowerCase();
+      const ok = !q || hay.includes(q) || (digits && hay.includes(digits));
+      el.hidden = !ok;
+      if (ok) shown += 1;
+    });
+    if (empty) empty.hidden = shown > 0;
+  };
+  input.addEventListener('input', filter);
+  setTimeout(() => input.focus(), 80);
+}
+
+function bindDetailExcel() {
+  document.querySelectorAll('#data-detail-body [data-excel]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!lastData) {
+        toast('Espere a que carguen los datos', 'warn');
+        return;
+      }
+      const seccion = btn.getAttribute('data-excel');
+      try {
+        const name = descargarExcelSeccion(lastData, seccion, { modo: modoFecha });
+        toast(`Excel listo: ${name}`, 'success');
+      } catch (err) {
+        toast(err.message || 'No se pudo descargar Excel', 'error');
+      }
+    });
+  });
+}
+
+function infoSupervisor(raw) {
+  const matched = matchSupervisorFijo(raw);
+  const dni = extraerDni(raw) || matched?.dni || '';
+  const nombre = nombreVisible(raw) || matched?.nombre || String(raw || '');
+  return { dni, nombre };
+}
+
 /**
  * @param {boolean} force true = pedir al servidor (botón refresh)
  */
@@ -131,6 +286,9 @@ async function cargar(force) {
       return;
     }
     lastData = null;
+    lastFaltan = [];
+    const faltanBtn = $('#btn-data-faltan');
+    if (faltanBtn) faltanBtn.hidden = true;
     root.innerHTML = `
       <div class="data-empty">
         <p class="data-empty__title">Sin internet</p>
@@ -149,18 +307,31 @@ async function cargar(force) {
   }
 
   try {
-    const fecha = modoFecha === 'all' ? 'all' : todayStr();
+    const fecha = modoFecha === 'all' ? 'all' : 'hoy';
     const resp = await obtenerDashboard(fecha);
     if (!resp?.ok) throw new Error(resp?.message || 'No se pudo cargar');
     writeLocalDash(modoFecha, resp);
-    applyData(resp, resp.fromCache ? 'servidor·cache' : 'servidor');
-    if (force) toast('Datos actualizados del servidor', 'success');
+    applyData(resp, labelFromMeta(resp));
+    if (force) {
+      const meta = resp.meta || {};
+      const fechas = Array.isArray(meta.fechasEncontradas) ? meta.fechasEncontradas : [];
+      if (modoFecha === 'hoy' && fechas.length > 1) {
+        toast(`Hoy = ${resp.fecha} · En Excel hay ${fechas.length} fechas`, 'info');
+      } else if (modoFecha === 'hoy' && meta.filasOmitidasPorFecha > 0) {
+        toast(`Hoy filtró ${meta.filasOmitidasPorFecha} filas de otras fechas`, 'info');
+      } else {
+        toast('Datos actualizados del servidor', 'success');
+      }
+    }
   } catch (err) {
     if (cached?.data) {
       applyData(cached.data, 'cache');
       toast('No se pudo actualizar — mostrando cache', 'warn');
     } else {
       lastData = null;
+      lastFaltan = [];
+      const faltanBtn = $('#btn-data-faltan');
+      if (faltanBtn) faltanBtn.hidden = true;
       root.innerHTML = `
         <div class="data-empty">
           <p class="data-empty__title">No se pudo cargar</p>
@@ -223,7 +394,10 @@ function render(data) {
     <section class="data-card data-card--tap" data-open="roles">
       <div class="data-card__head">
         <h3 class="data-card__title">Distribución por rol</h3>
-        <span class="data-card__action">Ampliar</span>
+        <div class="data-card__actions">
+          <button type="button" class="data-card__excel" data-excel="roles" aria-label="Descargar Excel roles">Excel</button>
+          <span class="data-card__action">Ampliar</span>
+        </div>
       </div>
       <div class="data-chart-row">
         <div class="data-columns" aria-hidden="true">
@@ -238,7 +412,10 @@ function render(data) {
     <section class="data-card data-card--tap" data-open="supervisores">
       <div class="data-card__head">
         <h3 class="data-card__title">Ranking supervisores</h3>
-        <span class="data-card__action">Ver todos</span>
+        <div class="data-card__actions">
+          <button type="button" class="data-card__excel" data-excel="supervisores" aria-label="Descargar Excel supervisores">Excel</button>
+          <span class="data-card__action">Ver todos</span>
+        </div>
       </div>
       ${supervisores.length ? `
         <div class="data-rank-chart" aria-hidden="true">
@@ -263,7 +440,10 @@ function render(data) {
     <section class="data-card data-card--tap" data-open="zonas">
       <div class="data-card__head">
         <h3 class="data-card__title">Personas por zona</h3>
-        <span class="data-card__action">Ampliar</span>
+        <div class="data-card__actions">
+          <button type="button" class="data-card__excel" data-excel="zonas" aria-label="Descargar Excel zonas">Excel</button>
+          <span class="data-card__action">Ampliar</span>
+        </div>
       </div>
       ${zonas.length ? `
         <div class="data-zona-bars" aria-hidden="true">
@@ -282,10 +462,10 @@ function render(data) {
     </section>
 
     <div class="data-foot-totals">
-      <button type="button" data-open="totales"><span>Supervisores</span><strong>${t.supervisoresUnicos || 0}</strong></button>
       <button type="button" data-open="cosechadores"><span>Cosechadores</span><strong>${t.cosechadores || 0}</strong></button>
       <button type="button" data-open="roles"><span>Escáner</span><strong>${t.escaner || 0}</strong></button>
       <button type="button" data-open="roles"><span>Calidad</span><strong>${t.calidad || 0}</strong></button>
+      <button type="button" data-open="roles"><span>Rol Sup</span><strong>${t.supervisorCount || 0}</strong></button>
       <button type="button" class="data-foot-totals__grand" data-open="totales"><span>Total junto</span><strong>${t.total || rolesTotal}</strong></button>
     </div>
   `;
@@ -297,6 +477,24 @@ function bindChartClicks() {
       const kind = el.getAttribute('data-open');
       if (!lastData || !kind) return;
       showModalFor(kind);
+    });
+  });
+
+  document.querySelectorAll('#data-root [data-excel]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!lastData) {
+        toast('Espere a que carguen los datos', 'warn');
+        return;
+      }
+      const seccion = btn.getAttribute('data-excel');
+      try {
+        const name = descargarExcelSeccion(lastData, seccion, { modo: modoFecha });
+        toast(`Excel listo: ${name}`, 'success');
+      } catch (err) {
+        toast(err.message || 'No se pudo descargar Excel', 'error');
+      }
     });
   });
 }
@@ -386,6 +584,10 @@ function showModalFor(kind) {
 
   if (kind === 'roles') {
     openDetail('Distribución por rol', `
+      <div class="dd-toolbar">
+        <p class="dd-toolbar__hint">Personal por rol</p>
+        <button type="button" class="data-card__excel dd-excel-btn" data-excel="roles">Excel</button>
+      </div>
       <div class="dd-hero">
         ${donutSvg(t, 160)}
       </div>
@@ -398,25 +600,32 @@ function showModalFor(kind) {
       </div>
       <div class="dd-total">Total personal <strong>${t.total || rolesTotal}</strong></div>
     `);
+    bindDetailExcel();
     return;
   }
 
   if (kind === 'supervisores' || kind === 'cosechadores') {
     openDetail(kind === 'cosechadores' ? 'Cosechadores por supervisor' : 'Ranking de supervisores', `
-      <div class="dd-stat-row">
-        <div><span>Supervisores</span><strong>${t.supervisoresUnicos || 0}</strong></div>
-        <div><span>Cosechadores</span><strong>${t.cosechadores || 0}</strong></div>
-        <div><span>Conteos</span><strong>${t.conteos || 0}</strong></div>
+      <div class="dd-toolbar">
+        <div class="dd-stat-row dd-stat-row--grow">
+          <div><span>Supervisores</span><strong>${t.supervisoresUnicos || 0}</strong></div>
+          <div><span>Cosechadores</span><strong>${t.cosechadores || 0}</strong></div>
+          <div><span>Conteos</span><strong>${t.conteos || 0}</strong></div>
+        </div>
+        <button type="button" class="data-card__excel dd-excel-btn" data-excel="supervisores">Excel</button>
       </div>
       ${supervisores.length ? `
+        ${searchHtml('Buscar nombre o DNI…')}
         <div class="dd-sup-list">
-          ${supervisores.map((s, i) => `
-            <article class="dd-sup">
+          ${supervisores.map((s, i) => {
+            const info = infoSupervisor(s.supervisor);
+            return `
+            <article class="dd-sup" data-sup-search="${esc(`${info.dni} ${info.nombre} ${s.supervisor}`)}">
               <div class="dd-sup__top">
                 <span class="dd-sup__rank">#${i + 1}</span>
                 <div class="dd-sup__who">
-                  <strong>${esc(s.supervisor)}</strong>
-                  <span>${s.conteos} conteo${s.conteos === 1 ? '' : 's'} · ${s.grupos || 0} grupo${(s.grupos || 0) === 1 ? '' : 's'}</span>
+                  <strong>${esc(info.nombre)}</strong>
+                  <span>${info.dni ? `${esc(info.dni)} · ` : ''}${s.conteos} conteo${s.conteos === 1 ? '' : 's'} · ${s.grupos || 0} grupo${(s.grupos || 0) === 1 ? '' : 's'}</span>
                 </div>
                 <div class="dd-sup__cos">
                   <strong>${s.cosechadores}</strong>
@@ -432,16 +641,23 @@ function showModalFor(kind) {
                 <span>Sup ${s.supervisorCount}</span>
                 <span class="dd-sup__total">Total ${s.total}</span>
               </div>
-            </article>
-          `).join('')}
+            </article>`;
+          }).join('')}
         </div>
+        <p id="dd-sup-search-empty" class="data-empty__hint" hidden>Sin coincidencias</p>
       ` : `<p class="data-empty__hint">Sin supervisores en este rango</p>`}
     `);
+    bindDetailSearch();
+    bindDetailExcel();
     return;
   }
 
   if (kind === 'zonas') {
     openDetail('Personas por zona', `
+      <div class="dd-toolbar">
+        <p class="dd-toolbar__hint">Listado completo de zonas</p>
+        <button type="button" class="data-card__excel dd-excel-btn" data-excel="zonas">Excel</button>
+      </div>
       <div class="dd-zona-chart">
         ${zonas.length ? zonas.map(z => `
           <div class="dd-zona-row">
@@ -455,6 +671,7 @@ function showModalFor(kind) {
       </div>
       <div class="dd-total">Total en zonas <strong>${zonas.reduce((a, z) => a + (z.cantidad || 0), 0)}</strong></div>
     `);
+    bindDetailExcel();
     return;
   }
 
@@ -553,8 +770,8 @@ function donutSvg(t, size = 120) {
 }
 
 function shortName(s) {
-  const t = String(s || '');
-  return t.length > 18 ? `${t.slice(0, 16)}…` : t;
+  const t = nombreVisible(s);
+  return t.length > 22 ? `${t.slice(0, 20)}…` : t;
 }
 
 function shortZona(s) {

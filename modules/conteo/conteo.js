@@ -4,7 +4,16 @@ import { persistConteo, conteoYaRegistrado } from '../../core/save-conteo.js';
 import { openZonaSelect, initZonaSelect, SVG_X } from '../../core/zona-select.js';
 import { openLoteSelect, initLoteSelect, aplicarLote, resetLote } from '../../core/lote-select.js';
 import { openGrupoSelect, initGrupoSelect, aplicarGrupo, resetGrupo } from '../../core/grupo-select.js';
+import {
+  initSupervisorSelect,
+  aplicarSupervisor,
+  resetSupervisor,
+  isModoEditar,
+  forzarSupervisorEditar,
+  desbloquearDniInput
+} from '../../core/supervisor-select.js';
 import { preloadLicapa } from '../../core/licapa-data.js';
+import { limpiarDni, extraerDni, buscarPorDni } from '../../core/supervisores-catalog.js';
 import { initDatePicker, setFecha, getFecha } from '../../core/date-picker.js';
 import { initComprobante, openComprobantePreview } from '../../core/comprobante.js';
 import { addCustomZona, validarZona } from '../../core/zonas-catalog.js';
@@ -20,6 +29,7 @@ import {
 /** @type {{zona:string,cantidad:number}[]} */
 let zonasAgregadas = [];
 let draftPaused = false;
+let editMode = false;
 
 const saveDraftDebounced = debounce(persistirBorrador, 400);
 
@@ -134,6 +144,7 @@ function persistirBorrador() {
     codLote: $('#codLote')?.value || '',
     variedad: $('#variedad')?.value || '',
     supervisor: $('#supervisor')?.value || '',
+    codSupervisor: $('#codSupervisor')?.value || '',
     fecha: $('#fecha')?.value || '',
     modulo: $('#modulo')?.value || '',
     turno: $('#turno')?.value || '',
@@ -162,7 +173,11 @@ function restaurarBorrador() {
     });
   }
 
-  if ($('#supervisor') && b.supervisor) $('#supervisor').value = b.supervisor;
+  if (b.codSupervisor) aplicarSupervisor(b.codSupervisor);
+  else if (b.supervisor) {
+    const dni = limpiarDni(b.supervisor);
+    if (dni.length >= 8) aplicarSupervisor(dni);
+  }
   // Fecha siempre del día — no se restaura del borrador
   setFecha(todayStr(), { silent: true });
 
@@ -304,6 +319,7 @@ function getPayload(extra = {}) {
     codLote: $('#codLote')?.value?.trim() || '',
     variedad: $('#variedad')?.value?.trim() || '',
     supervisor: $('#supervisor')?.value?.trim() || '',
+    codSupervisor: $('#codSupervisor')?.value?.trim() || '',
     fecha: $('#fecha')?.value || todayStr(),
     modulo: $('#modulo')?.value?.trim() || '',
     turno: $('#turno')?.value?.trim() || '',
@@ -314,6 +330,7 @@ function getPayload(extra = {}) {
     almuerzos: num('almuerzos'),
     permisos: num('permisos'),
     faltas: num('faltas'),
+    editar: editMode || isModoEditar(),
     ...extra
   };
 }
@@ -334,9 +351,111 @@ export async function initConteo() {
     initLoteSelect(),
     initGrupoSelect()
   ]);
+  initSupervisorSelect(onSupervisorChange);
 
   restaurarBorrador();
   setFecha(todayStr(), { silent: true });
+}
+
+function onSupervisorChange({ supervisor, modoEditar, existente }) {
+  editMode = Boolean(modoEditar);
+  const btn = $('#btn-ver-resumen');
+  if (btn) btn.textContent = editMode ? 'Ver y actualizar' : 'Ver resumen';
+
+  if (!supervisor) return;
+
+  if (!existente) {
+    // Nuevo DNI sin marca: no rellenar con data ajena
+    return;
+  }
+
+  rellenarFormularioDesde(existente, { toastMsg: 'Datos de hoy cargados — puede editarlos' });
+}
+
+/**
+ * Carga un conteo del historial de ESTE celular para editar en el servidor.
+ * El DNI ya viene en el registro (no se pide de nuevo).
+ */
+export function cargarConteoParaEditar(item) {
+  if (!item?.localId) {
+    toast('Solo puede editar lo enviado desde este celular', 'error');
+    return false;
+  }
+
+  const dni = limpiarDni(item.codSupervisor) || extraerDni(item.supervisor);
+  if (!dni || dni.length < 8) {
+    toast('Este registro no tiene DNI — no se puede actualizar en el servidor', 'error');
+    return false;
+  }
+  if (!buscarPorDni(dni)) {
+    toast('DNI del registro no está en la lista de supervisores', 'error');
+    return false;
+  }
+
+  draftPaused = true;
+  forzarSupervisorEditar(dni, { skipNotify: true });
+  editMode = true;
+  const btn = $('#btn-ver-resumen');
+  if (btn) btn.textContent = 'Ver y actualizar';
+
+  rellenarFormularioDesde(item, {
+    toastMsg: 'Listo para editar — al guardar se actualiza en el servidor',
+    keepFecha: true
+  });
+  draftPaused = false;
+  return true;
+}
+
+function rellenarFormularioDesde(data, { toastMsg = '', keepFecha = false } = {}) {
+  draftPaused = true;
+
+  if (data.grupoCosecha || data.grupoLabel) {
+    const n = String(data.grupoCosecha || '').replace(/\D/g, '');
+    const label = data.grupoLabel
+      || (n ? `Grupo Cosecha - ${n.padStart(2, '0')}` : String(data.grupoCosecha || ''));
+    if (label) aplicarGrupo(label);
+  }
+
+  if (data.lote) {
+    const mod = data.modulo ? `M${String(data.modulo).replace(/\D/g, '')}` : 'M';
+    aplicarLote({
+      lote: data.lote,
+      codLote: data.codLote || '',
+      variedad: data.variedad || '',
+      modulo: mod,
+      turno: data.turno || ''
+    });
+  }
+
+  const roleMap = {
+    cosechadores: data.cosechadores,
+    escaner: data.escaner,
+    calidad: data.calidad,
+    numSupervisores: data.supervisorCount
+  };
+  Object.entries(roleMap).forEach(([key, val]) => {
+    const el = document.getElementById(`role-${key}`);
+    if (el && val != null) el.value = displayNum(val);
+  });
+
+  if (Array.isArray(data.distribucionZonas)) {
+    zonasAgregadas = data.distribucionZonas.map((z) => ({
+      zona: z.zona,
+      cantidad: Number(z.cantidad) || 0
+    }));
+  }
+
+  if ($('#almuerzos') && data.almuerzos != null) $('#almuerzos').value = displayNum(data.almuerzos);
+  if ($('#permisos') && data.permisos != null) $('#permisos').value = displayNum(data.permisos);
+  if ($('#faltas') && data.faltas != null) $('#faltas').value = displayNum(data.faltas);
+
+  if (keepFecha && data.fecha) setFecha(data.fecha, { silent: true });
+  else setFecha(todayStr(), { silent: true });
+
+  renderZonasList();
+  updateTotals();
+  draftPaused = false;
+  if (toastMsg) toast(toastMsg, 'info');
 }
 
 function bindLiveTotals() {
@@ -407,8 +526,12 @@ function buildPayloadParaGuardar() {
 }
 
 function validarPayload(payload) {
+  if (!payload.codSupervisor || limpiarDni(payload.codSupervisor).length < 8) {
+    toast('Ingrese su DNI de supervisor', 'error');
+    return false;
+  }
+  if (!payload.supervisor) { toast('DNI no válido en la lista', 'error'); return false; }
   if (!payload.grupoCosecha) { toast('Seleccione el grupo', 'error'); return false; }
-  if (!payload.supervisor) { toast('Ingrese el supervisor', 'error'); return false; }
   if (!payload.lote) { toast('Seleccione el lote', 'error'); return false; }
   if (!payload.modulo || !payload.turno) { toast('Seleccione lote para módulo/turno', 'error'); return false; }
   if (payload.totalPersonal === 0) { toast('Ingrese personal', 'error'); return false; }
@@ -431,8 +554,8 @@ function validarPayload(payload) {
       return false;
     }
   }
-  if (conteoYaRegistrado(payload)) {
-    toast('Ya hay conteo para este grupo y fecha', 'warn');
+  if (!payload.editar && conteoYaRegistrado(payload)) {
+    toast('Este DNI ya tiene conteo hoy — se cargará para editar', 'warn');
     return false;
   }
   return true;
@@ -446,7 +569,7 @@ function onVerResumen() {
 
 async function guardarDesdeResumen(payload) {
   if (!validarPayload(payload)) return { saved: false };
-  const result = await persistConteo(payload);
+  const result = await persistConteo(payload, { editar: Boolean(payload.editar) });
   if (result.saved) resetForm();
   return result;
 }
@@ -454,12 +577,12 @@ async function guardarDesdeResumen(payload) {
 function resetForm() {
   saveDraftDebounced.cancel();
   draftPaused = true;
+  editMode = false;
 
   resetGrupo();
+  desbloquearDniInput();
+  resetSupervisor();
   resetLote();
-
-  const supervisor = $('#supervisor');
-  if (supervisor) supervisor.value = '';
 
   document.querySelectorAll('#roles-grid .num-input, .resumen-grid .num-input').forEach((el) => {
     el.value = '';
@@ -471,6 +594,9 @@ function resetForm() {
   if (zonaInput) zonaInput.value = '';
   const zonaMsg = $('#zona-nueva-msg');
   if (zonaMsg) zonaMsg.hidden = true;
+
+  const btn = $('#btn-ver-resumen');
+  if (btn) btn.textContent = 'Ver resumen';
 
   setFecha(todayStr(), { silent: true });
   renderZonasList();
