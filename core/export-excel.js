@@ -86,15 +86,16 @@ function tableSupervisores(data, modo = 'hoy') {
   const { fechaLabel, rango } = metaRango(data, modo);
 
   const rows = [
-    ['Ranking de supervisores', '', '', '', '', '', '', '', '', ''],
-    ['Rango', rango, '', '', '', '', '', '', '', ''],
-    ['Fecha', fechaLabel, '', '', '', '', '', '', '', ''],
-    ['Supervisores', t.supervisoresUnicos || 0, '', '', '', '', '', '', '', ''],
-    ['Cosechadores', t.cosechadores || 0, '', '', '', '', '', '', '', ''],
-    ['Conteos', t.conteos || 0, '', '', '', '', '', '', '', ''],
+    ['Ranking por puntualidad', '', '', '', '', '', '', '', '', '', ''],
+    ['Rango', rango, '', '', '', '', '', '', '', '', ''],
+    ['Fecha', fechaLabel, '', '', '', '', '', '', '', '', ''],
+    ['Supervisores', t.supervisoresUnicos || 0, '', '', '', '', '', '', '', '', ''],
+    ['Cosechadores', t.cosechadores || 0, '', '', '', '', '', '', '', '', ''],
+    ['Conteos', t.conteos || 0, '', '', '', '', '', '', '', '', ''],
     [],
     [
       '#',
+      'Hora',
       'DNI',
       'Supervisor',
       'Conteos',
@@ -107,10 +108,19 @@ function tableSupervisores(data, modo = 'hoy') {
     ]
   ];
 
-  supervisores.forEach((s, i) => {
+  const ordenados = [...supervisores].sort((a, b) => {
+    const ha = a.horaRegistro || '99:99:99';
+    const hb = b.horaRegistro || '99:99:99';
+    if (ha !== hb) return ha < hb ? -1 : 1;
+    return (b.cosechadores || 0) - (a.cosechadores || 0) || (b.total || 0) - (a.total || 0);
+  });
+
+  ordenados.forEach((s, i) => {
     const info = infoSup(s.supervisor);
+    const hora = (s.horaRegistro || '').replace(/^(\d{2}:\d{2}).*/, '$1');
     rows.push([
       i + 1,
+      hora,
       info.dni,
       info.nombre,
       s.conteos || 0,

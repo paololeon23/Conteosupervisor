@@ -192,13 +192,12 @@ export function initDatePicker(onChange) {
   datePickerInited = true;
 
   bindModalControls();
+  // Siempre el día actual en hora Perú (Lima) — no reutilizar fecha vieja del DOM/borrador
+  setFecha(todayStr(), { silent: true });
   syncViewToSelection();
+}
 
-  const btn = $('#btn-pick-fecha');
-  if (getFecha()) {
-    $('#fecha-label') && ($('#fecha-label').textContent = formatFechaDisplay(getFecha()));
-    btn?.classList.add('btn--pick-filled');
-  } else {
-    setFecha(todayStr(), { silent: true });
-  }
+/** Fuerza la fecha principal al día actual América/Lima */
+export function syncFechaHoy({ silent = true } = {}) {
+  setFecha(todayStr(), { silent });
 }

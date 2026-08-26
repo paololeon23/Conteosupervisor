@@ -1,4 +1,4 @@
-const CACHE = 'qb-conteo-v3.5.5';
+const CACHE = 'qb-conteo-v3.6.7';
 
 const ASSETS = [
   '/index.html',
@@ -41,6 +41,13 @@ const OFFLINE_HTML = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"
 self.addEventListener('message', (e) => {
   if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
   if (e.data?.type === 'WARM') e.waitUntil(precacheAll());
+  if (e.data?.type === 'PURGE_AND_WARM') {
+    e.waitUntil(
+      caches.keys()
+        .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+        .then(() => precacheAll())
+    );
+  }
 });
 
 function isHtmlRequest(request) {

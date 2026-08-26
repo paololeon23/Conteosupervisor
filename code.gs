@@ -273,7 +273,7 @@
         permisos: num_(personal[COL.PERMISOS]),
         faltas: num_(personal[COL.FALTAS]),
         distribucionZonas: zonas,
-        horaRegistro: String(personal[COL.HORA] || '').trim()
+        horaRegistro: horaTexto_(personal[COL.HORA])
       }
     };
   }
@@ -376,7 +376,7 @@
     var filtroRaw = String(fechaFiltro || '').trim();
     var todas = filtroRaw.toLowerCase() === 'all' || filtroRaw === '*';
     var filtro = todas ? 'all' : resolverFechaFiltro_(filtroRaw);
-    var cacheKey = 'dash_v4_' + (todas ? 'all' : filtro);
+    var cacheKey = 'dash_v6_' + (todas ? 'all' : filtro);
 
     var cache = CacheService.getScriptCache();
     try {
@@ -452,10 +452,15 @@
             supervisorCount: 0,
             total: 0,
             conteos: 0,
-            grupos: {}
+            grupos: {},
+            horaRegistro: ''
           };
         }
         var s = bySup[key];
+        var horaFila = horaTexto_(row[COL.HORA]);
+        if (horaFila && (!s.horaRegistro || horaFila < s.horaRegistro)) {
+          s.horaRegistro = horaFila;
+        }
         s.cosechadores += cos;
         s.escaner += esc;
         s.calidad += cal;
@@ -497,10 +502,15 @@
         supervisorCount: item.supervisorCount,
         total: item.total,
         conteos: item.conteos,
-        grupos: nGrupos
+        grupos: nGrupos,
+        horaRegistro: item.horaRegistro || ''
       });
     }
+    // Más puntual primero (hora de registro más temprana)
     supervisores.sort(function (a, b) {
+      var ha = a.horaRegistro || '99:99:99';
+      var hb = b.horaRegistro || '99:99:99';
+      if (ha !== hb) return ha < hb ? -1 : 1;
       return b.cosechadores - a.cosechadores || b.total - a.total;
     });
 
@@ -563,12 +573,11 @@
   function invalidarDashboardCache_() {
     try {
       var cache = CacheService.getScriptCache();
-      cache.remove('dash_v4_' + hoy_());
-      cache.remove('dash_v4_all');
-      cache.remove('dash_v3_' + hoy_());
-      cache.remove('dash_v3_all');
-      cache.remove('dash_v2_' + hoy_());
-      cache.remove('dash_v2_all');
+      var hoy = hoy_();
+      ['dash_v6_', 'dash_v5_', 'dash_v4_', 'dash_v3_', 'dash_v2_'].forEach(function (p) {
+        cache.remove(p + hoy);
+        cache.remove(p + 'all');
+      });
     } catch (e) { /* ok */ }
   }
 
@@ -777,8 +786,229 @@
     return Utilities.formatDate(new Date(), TZ, 'HH:mm:ss');
   }
 
+  /** Normaliza celda de hora (Date, fracción Excel o texto) a HH:mm:ss */
+  function horaTexto_(val) {
+    if (val == null || val === '') return '';
+
+    // Fracción de día de Sheets/Excel (ej. 0.25 = 06:00)
+    if (typeof val === 'number' && isFinite(val) && val >= 0 && val < 2) {
+      var frac = val % 1;
+      if (frac < 0) frac += 1;
+      var totalSec = Math.round(frac * 86400);
+      if (totalSec >= 86400) totalSec = 86399;
+      var hhN = Math.floor(totalSec / 3600);
+      var mmN = Math.floor((totalSec % 3600) / 60);
+      var ssN = totalSec % 60;
+      return ('0' + hhN).slice(-2) + ':' + ('0' + mmN).slice(-2) + ':' + ('0' + ssN).slice(-2);
+    }
+
+    if (Object.prototype.toString.call(val) === '[object Date]' && !isNaN(val.getTime())) {
+      return Utilities.formatDate(val, TZ, 'HH:mm:ss');
+    }
+
+    var t = String(val).trim();
+    if (!t) return '';
+
+    var m = t.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (m) {
+      var hh = ('0' + parseInt(m[1], 10)).slice(-2);
+      var mm = m[2];
+      var ss = m[3] || '00';
+      return hh + ':' + mm + ':' + ss;
+    }
+    return '';
+  }
+
   function responder_(obj) {
     return ContentService
       .createTextOutput(JSON.stringify(obj))
       .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  /** Menú en el Sheet */
+  function onOpen() {
+    SpreadsheetApp.getUi()
+      .createMenu('Q Berries')
+      .addItem('Actualizar 4 gráficos limpios', 'actualizarDashboardGraficos')
+      .addItem('Borrar gráficos amontonados', 'borrarTodosLosGraficos')
+      .addToUi();
+  }
+
+  /** Quita todos los gráficos del libro (LIC amontonados, etc.) */
+  function borrarTodosLosGraficos() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var hojas = ss.getSheets();
+    var n = 0;
+    for (var i = 0; i < hojas.length; i++) {
+      var charts = hojas[i].getCharts();
+      for (var c = 0; c < charts.length; c++) {
+        hojas[i].removeChart(charts[c]);
+        n++;
+      }
+    }
+    try {
+      SpreadsheetApp.getUi().alert(
+        'Listo',
+        'Se borraron ' + n + ' gráficos.\nLuego: Actualizar 4 gráficos limpios.',
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } catch (e) { /* ok */ }
+  }
+
+  /**
+   * 4 gráficos pequeños: Roles · Top 3 · Zonas · Resumen
+   * Sin listar a todos (eso amontona números).
+   */
+  function actualizarDashboardGraficos() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var hojas = ss.getSheets();
+    for (var h = 0; h < hojas.length; h++) {
+      var old = hojas[h].getCharts();
+      for (var o = 0; o < old.length; o++) hojas[h].removeChart(old[o]);
+    }
+
+    var dash = ss.getSheetByName('Dashboard');
+    if (!dash) dash = ss.insertSheet('Dashboard');
+    dash.clear();
+
+    var data = dashboard_('hoy');
+    var t = data.totales || {};
+    var supers = (data.supervisores || []).slice(0, 3);
+    var zonas = (data.zonas || []).slice(0, 3);
+    var fechaTxt = String(data.fecha || hoy_());
+
+    dash.getRange('A1').setValue('Q Berries · ' + fechaTxt + ' · 4 gráficos');
+    dash.getRange('A1').setFontWeight('bold').setFontSize(13).setFontColor('#D61F26');
+    dash.getRange('A2').setValue('Compacto: Top 3 · un número por barra');
+    dash.getRange('A2').setFontSize(9).setFontColor('#6B7280');
+
+    dash.getRange('A4:B4').setValues([['Rol', 'N']]).setFontWeight('bold');
+    dash.getRange('A5:B8').setValues([
+      ['Cosech.', t.cosechadores || 0],
+      ['Escáner', t.escaner || 0],
+      ['Calidad', t.calidad || 0],
+      ['Sup', t.supervisorCount || 0]
+    ]);
+
+    dash.getRange('D4:E4').setValues([['Top', 'Cos.']]).setFontWeight('bold');
+    var supRows = [];
+    for (var i = 0; i < supers.length; i++) {
+      var nom = nombreCortoGrafico_(supers[i].supervisor);
+      supRows.push(['#' + (i + 1) + ' ' + nom, supers[i].cosechadores || 0]);
+    }
+    if (!supRows.length) supRows.push(['—', 0]);
+    dash.getRange(5, 4, 4 + supRows.length, 5).setValues(supRows);
+
+    dash.getRange('G4:H4').setValues([['Zona', 'Pers.']]).setFontWeight('bold');
+    var zonaRows = [];
+    for (var z = 0; z < zonas.length; z++) {
+      var zn = String(zonas[z].zona || '');
+      if (zn.length > 12) zn = zn.substring(0, 11) + '…';
+      zonaRows.push([zn, zonas[z].cantidad || 0]);
+    }
+    if (!zonaRows.length) zonaRows.push(['—', 0]);
+    dash.getRange(5, 7, 4 + zonaRows.length, 8).setValues(zonaRows);
+
+    dash.getRange('J4:K4').setValues([['KPI', 'Valor']]).setFontWeight('bold');
+    dash.getRange('J5:K7').setValues([
+      ['Personal', t.total || 0],
+      ['Conteos', t.conteos || 0],
+      ['Almuerzos', t.almuerzos || 0]
+    ]);
+
+    var nSup = Math.max(supRows.length, 1);
+    var nZona = Math.max(zonaRows.length, 1);
+
+    dash.insertChart(
+      dash.newChart()
+        .setChartType(Charts.ChartType.PIE)
+        .addRange(dash.getRange(4, 1, 8, 2))
+        .setPosition(10, 1, 0, 0)
+        .setOption('title', 'Roles')
+        .setOption('pieSliceText', 'none')
+        .setOption('legend', { position: 'labeled', textStyle: { fontSize: 10 } })
+        .setOption('chartArea', { left: 10, top: 36, width: '90%', height: '78%' })
+        .setOption('width', 340)
+        .setOption('height', 220)
+        .setOption('colors', ['#52AD4B', '#3B82F6', '#F7941E', '#D61F26'])
+        .build()
+    );
+
+    dash.insertChart(
+      dash.newChart()
+        .setChartType(Charts.ChartType.BAR)
+        .addRange(dash.getRange(4, 4, 4 + nSup, 5))
+        .setPosition(10, 6, 0, 0)
+        .setOption('title', 'Top 3 supervisores')
+        .setOption('legend', { position: 'none' })
+        .setOption('chartArea', { left: 100, top: 36, right: 24, bottom: 36, width: '60%', height: '70%' })
+        .setOption('hAxis', { minValue: 0, gridlines: { count: 4 }, textStyle: { fontSize: 9 }, format: '0' })
+        .setOption('vAxis', { textStyle: { fontSize: 9 } })
+        .setOption('series', { 0: { dataLabel: 'none' } })
+        .setOption('colors', ['#52AD4B'])
+        .setOption('width', 340)
+        .setOption('height', 220)
+        .build()
+    );
+
+    dash.insertChart(
+      dash.newChart()
+        .setChartType(Charts.ChartType.COLUMN)
+        .addRange(dash.getRange(4, 7, 4 + nZona, 8))
+        .setPosition(24, 1, 0, 0)
+        .setOption('title', 'Top 3 zonas')
+        .setOption('legend', { position: 'none' })
+        .setOption('chartArea', { left: 36, top: 36, right: 16, bottom: 48, width: '78%', height: '62%' })
+        .setOption('hAxis', { textStyle: { fontSize: 9 } })
+        .setOption('vAxis', { minValue: 0, gridlines: { count: 4 }, textStyle: { fontSize: 9 }, format: '0' })
+        .setOption('series', { 0: { dataLabel: 'none' } })
+        .setOption('colors', ['#F7941E'])
+        .setOption('width', 340)
+        .setOption('height', 220)
+        .build()
+    );
+
+    dash.insertChart(
+      dash.newChart()
+        .setChartType(Charts.ChartType.COLUMN)
+        .addRange(dash.getRange(4, 10, 7, 11))
+        .setPosition(24, 6, 0, 0)
+        .setOption('title', 'Resumen del día')
+        .setOption('legend', { position: 'none' })
+        .setOption('chartArea', { left: 36, top: 36, right: 16, bottom: 40, width: '78%', height: '65%' })
+        .setOption('hAxis', { textStyle: { fontSize: 10 } })
+        .setOption('vAxis', { minValue: 0, gridlines: { count: 4 }, textStyle: { fontSize: 9 }, format: '0' })
+        .setOption('series', { 0: { dataLabel: 'none' } })
+        .setOption('colors', ['#D61F26'])
+        .setOption('width', 340)
+        .setOption('height', 220)
+        .build()
+    );
+
+    dash.getRange('A28').setValue('Personal');
+    dash.getRange('B28').setValue(t.total || 0).setFontSize(22).setFontWeight('bold').setFontColor('#D61F26');
+    dash.getRange('C28').setValue('Conteos');
+    dash.getRange('D28').setValue(t.conteos || 0).setFontSize(22).setFontWeight('bold').setFontColor('#52AD4B');
+    dash.getRange('E28').setValue('Sup.');
+    dash.getRange('F28').setValue(t.supervisoresUnicos || 0).setFontSize(22).setFontWeight('bold').setFontColor('#3B82F6');
+
+    dash.activate();
+    try {
+      SpreadsheetApp.getUi().alert(
+        'Listo',
+        '4 gráficos pequeños: Roles · Top 3 · Zonas · Resumen',
+        SpreadsheetApp.getUi().ButtonSet.OK
+      );
+    } catch (eUi) { /* ok */ }
+  }
+
+  function nombreCortoGrafico_(raw) {
+    var s = String(raw || '')
+      .replace(/^\d{8,9}\s*[·\-–]?\s*/, '')
+      .trim()
+      .toUpperCase();
+    if (!s) return '—';
+    var partes = s.split(/\s+/);
+    if (partes.length >= 2) return partes[0] + ' ' + partes[1];
+    return s.length > 14 ? s.substring(0, 12) + '…' : s;
   }

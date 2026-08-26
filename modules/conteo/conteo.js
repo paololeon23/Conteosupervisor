@@ -14,7 +14,7 @@ import {
 } from '../../core/supervisor-select.js';
 import { preloadLicapa } from '../../core/licapa-data.js';
 import { limpiarDni, extraerDni, buscarPorDni } from '../../core/supervisores-catalog.js';
-import { initDatePicker, setFecha, getFecha } from '../../core/date-picker.js';
+import { initDatePicker, setFecha, getFecha, syncFechaHoy } from '../../core/date-picker.js';
 import { initComprobante, openComprobantePreview } from '../../core/comprobante.js';
 import { addCustomZona, validarZona } from '../../core/zonas-catalog.js';
 import { todayStr, nowTimeStr, toast, debounce, $ } from '../../core/utils.js';
@@ -355,6 +355,15 @@ export async function initConteo() {
 
   restaurarBorrador();
   setFecha(todayStr(), { silent: true });
+
+  // Si la PWA queda abierta de un día a otro, refrescar fecha Lima
+  const refreshFechaLima = () => {
+    if (document.visibilityState === 'hidden') return;
+    syncFechaHoy({ silent: true });
+  };
+  document.addEventListener('visibilitychange', refreshFechaLima);
+  window.addEventListener('pageshow', refreshFechaLima);
+  window.addEventListener('focus', refreshFechaLima);
 }
 
 function onSupervisorChange({ supervisor, modoEditar, existente }) {
@@ -399,14 +408,13 @@ export function cargarConteoParaEditar(item) {
   if (btn) btn.textContent = 'Ver y actualizar';
 
   rellenarFormularioDesde(item, {
-    toastMsg: 'Listo para editar — al guardar se actualiza en el servidor',
-    keepFecha: true
+    toastMsg: 'Listo para editar — al guardar se actualiza en el servidor'
   });
   draftPaused = false;
   return true;
 }
 
-function rellenarFormularioDesde(data, { toastMsg = '', keepFecha = false } = {}) {
+function rellenarFormularioDesde(data, { toastMsg = '' } = {}) {
   draftPaused = true;
 
   if (data.grupoCosecha || data.grupoLabel) {
@@ -449,8 +457,8 @@ function rellenarFormularioDesde(data, { toastMsg = '', keepFecha = false } = {}
   if ($('#permisos') && data.permisos != null) $('#permisos').value = displayNum(data.permisos);
   if ($('#faltas') && data.faltas != null) $('#faltas').value = displayNum(data.faltas);
 
-  if (keepFecha && data.fecha) setFecha(data.fecha, { silent: true });
-  else setFecha(todayStr(), { silent: true });
+  // Fecha principal = siempre hoy Lima (nunca se “pega” a un día anterior)
+  setFecha(todayStr(), { silent: true });
 
   renderZonasList();
   updateTotals();

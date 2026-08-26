@@ -29,7 +29,7 @@ const ROLE_COLORS = {
 };
 
 function dashStorageKey(modo) {
-  return `${STORAGE_KEYS.DASHBOARD}_${modo}`;
+  return `${STORAGE_KEYS.DASHBOARD}_v2_${modo}`;
 }
 
 function readLocalDash(modo) {
@@ -353,120 +353,79 @@ function render(data) {
   const t = data.totales || {};
   const supervisores = Array.isArray(data.supervisores) ? data.supervisores : [];
   const zonas = Array.isArray(data.zonas) ? data.zonas : [];
-  const maxZona = Math.max(1, ...zonas.map(z => z.cantidad || 0));
-  const maxCos = Math.max(1, ...supervisores.map(s => s.cosechadores || 0));
+  const topSup = supervisores.slice(0, 3);
+  const topZonas = zonas.slice(0, 3);
+  const maxZona = Math.max(1, ...topZonas.map(z => z.cantidad || 0));
   const rolesTotal = (t.cosechadores || 0) + (t.escaner || 0) + (t.calidad || 0) + (t.supervisorCount || 0);
 
   root.innerHTML = `
-    <p class="data-hint-tap">Toque una tarjeta o gráfico para ver el detalle</p>
+    <p class="data-hint-tap">4 gráficos compactos · toque para detalle</p>
 
-    <div class="data-kpis">
-      <button type="button" class="data-kpi data-kpi--red" data-open="supervisores">
-        <span class="data-kpi__label">Supervisores</span>
-        <strong class="data-kpi__val">${t.supervisoresUnicos || 0}</strong>
-        <span class="data-kpi__sub">${t.conteos || 0} conteos · ver</span>
-      </button>
-      <button type="button" class="data-kpi data-kpi--green" data-open="cosechadores">
-        <span class="data-kpi__label">Cosechadores</span>
-        <strong class="data-kpi__val">${t.cosechadores || 0}</strong>
-        <span class="data-kpi__sub">columna K · ver</span>
-      </button>
-      <button type="button" class="data-kpi data-kpi--blue" data-open="roles">
-        <span class="data-kpi__label">Escáner</span>
-        <strong class="data-kpi__val">${t.escaner || 0}</strong>
-        <span class="data-kpi__sub">ver roles</span>
-      </button>
-      <button type="button" class="data-kpi data-kpi--amber" data-open="roles">
-        <span class="data-kpi__label">Calidad</span>
-        <strong class="data-kpi__val">${t.calidad || 0}</strong>
-        <span class="data-kpi__sub">ver roles</span>
-      </button>
-    </div>
+    <div class="data-charts-grid">
+      <section class="data-card data-card--tap data-card--compact" data-open="roles">
+        <div class="data-card__head">
+          <h3 class="data-card__title">Roles</h3>
+          <div class="data-card__actions">
+            <button type="button" class="data-card__excel" data-excel="roles" aria-label="Excel roles">Excel</button>
+            <span class="data-card__action">Ampliar</span>
+          </div>
+        </div>
+        ${donutSvg(t, 120)}
+      </section>
 
-    <button type="button" class="data-total-banner" data-open="totales">
-      <div>
-        <p class="data-total-banner__label">Total personal</p>
-        <p class="data-total-banner__hint">Toque para ver resumen completo</p>
-      </div>
-      <strong class="data-total-banner__val">${t.total || rolesTotal}</strong>
-    </button>
+      <section class="data-card data-card--tap data-card--compact" data-open="supervisores">
+        <div class="data-card__head">
+          <h3 class="data-card__title">Top 3 supervisores</h3>
+          <div class="data-card__actions">
+            <button type="button" class="data-card__excel" data-excel="supervisores" aria-label="Excel supervisores">Excel</button>
+            <span class="data-card__action">Todos</span>
+          </div>
+        </div>
+        ${topSup.length ? `
+          <div class="data-mini-list">
+            ${topSup.map((s, i) => `
+              <div class="data-mini-row">
+                <span class="data-mini-rank">${i + 1}</span>
+                <span class="data-mini-name">${esc(shortName(s.supervisor))}</span>
+                <strong>${s.cosechadores}</strong>
+              </div>
+            `).join('')}
+          </div>
+        ` : `<p class="data-empty__hint">Sin datos</p>`}
+      </section>
 
-    <section class="data-card data-card--tap" data-open="roles">
-      <div class="data-card__head">
-        <h3 class="data-card__title">Distribución por rol</h3>
-        <div class="data-card__actions">
-          <button type="button" class="data-card__excel" data-excel="roles" aria-label="Descargar Excel roles">Excel</button>
+      <section class="data-card data-card--tap data-card--compact" data-open="zonas">
+        <div class="data-card__head">
+          <h3 class="data-card__title">Top 3 zonas</h3>
+          <div class="data-card__actions">
+            <button type="button" class="data-card__excel" data-excel="zonas" aria-label="Excel zonas">Excel</button>
+            <span class="data-card__action">Todas</span>
+          </div>
+        </div>
+        ${topZonas.length ? `
+          <div class="data-mini-list">
+            ${topZonas.map((z) => `
+              <div class="data-mini-row">
+                <span class="data-mini-name">${esc(shortZonaFull(z.zona))}</span>
+                <div class="data-mini-bar"><i style="width:${pct(z.cantidad, maxZona)}%"></i></div>
+                <strong>${z.cantidad}</strong>
+              </div>
+            `).join('')}
+          </div>
+        ` : `<p class="data-empty__hint">Sin datos</p>`}
+      </section>
+
+      <section class="data-card data-card--tap data-card--compact" data-open="totales">
+        <div class="data-card__head">
+          <h3 class="data-card__title">Resumen</h3>
           <span class="data-card__action">Ampliar</span>
         </div>
-      </div>
-      <div class="data-chart-row">
-        <div class="data-columns" aria-hidden="true">
-          ${columnChart(t, rolesTotal)}
+        <div class="data-kpi-trio">
+          <div><span>Personal</span><strong>${t.total || rolesTotal}</strong></div>
+          <div><span>Conteos</span><strong>${t.conteos || 0}</strong></div>
+          <div><span>Almuerzos</span><strong>${t.almuerzos || 0}</strong></div>
         </div>
-        <div class="data-donut-wrap">
-          ${donutSvg(t, 140)}
-        </div>
-      </div>
-    </section>
-
-    <section class="data-card data-card--tap" data-open="supervisores">
-      <div class="data-card__head">
-        <h3 class="data-card__title">Ranking supervisores</h3>
-        <div class="data-card__actions">
-          <button type="button" class="data-card__excel" data-excel="supervisores" aria-label="Descargar Excel supervisores">Excel</button>
-          <span class="data-card__action">Ver todos</span>
-        </div>
-      </div>
-      ${supervisores.length ? `
-        <div class="data-rank-chart" aria-hidden="true">
-          ${supervisores.slice(0, 6).map((s, i) => `
-            <div class="data-rank-row">
-              <span class="data-rank-row__n">${i + 1}</span>
-              <div class="data-rank-row__body">
-                <div class="data-rank-row__top">
-                  <span>${esc(shortName(s.supervisor))}</span>
-                  <strong>${s.cosechadores}</strong>
-                </div>
-                <div class="data-bar data-bar--lg">
-                  <div class="data-bar__fill data-bar__fill--green" style="width:${pct(s.cosechadores, maxCos)}%"></div>
-                </div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      ` : `<p class="data-empty__hint">Sin datos de supervisores</p>`}
-    </section>
-
-    <section class="data-card data-card--tap" data-open="zonas">
-      <div class="data-card__head">
-        <h3 class="data-card__title">Personas por zona</h3>
-        <div class="data-card__actions">
-          <button type="button" class="data-card__excel" data-excel="zonas" aria-label="Descargar Excel zonas">Excel</button>
-          <span class="data-card__action">Ampliar</span>
-        </div>
-      </div>
-      ${zonas.length ? `
-        <div class="data-zona-bars" aria-hidden="true">
-          ${zonas.slice(0, 8).map(z => `
-            <div class="data-zona-col">
-              <div class="data-zona-col__bar-wrap">
-                <div class="data-zona-col__bar" style="height:${pct(z.cantidad, maxZona)}%">
-                  <span>${z.cantidad}</span>
-                </div>
-              </div>
-              <span class="data-zona-col__label">${esc(shortZona(z.zona))}</span>
-            </div>
-          `).join('')}
-        </div>
-      ` : `<p class="data-empty__hint">Sin datos de zonas</p>`}
-    </section>
-
-    <div class="data-foot-totals">
-      <button type="button" data-open="cosechadores"><span>Cosechadores</span><strong>${t.cosechadores || 0}</strong></button>
-      <button type="button" data-open="roles"><span>Escáner</span><strong>${t.escaner || 0}</strong></button>
-      <button type="button" data-open="roles"><span>Calidad</span><strong>${t.calidad || 0}</strong></button>
-      <button type="button" data-open="roles"><span>Rol Sup</span><strong>${t.supervisorCount || 0}</strong></button>
-      <button type="button" class="data-foot-totals__grand" data-open="totales"><span>Total junto</span><strong>${t.total || rolesTotal}</strong></button>
+      </section>
     </div>
   `;
 }
@@ -502,7 +461,12 @@ function bindChartClicks() {
 /** Modal principal: gráficos del resumen + opción de compartir imagen */
 function openResumenGraficos(data) {
   const t = data.totales || {};
-  const supervisores = data.supervisores || [];
+  const supervisores = [...(data.supervisores || [])].sort((a, b) => {
+    const ha = a.horaRegistro || '99:99:99';
+    const hb = b.horaRegistro || '99:99:99';
+    if (ha !== hb) return ha < hb ? -1 : 1;
+    return (b.cosechadores || 0) - (a.cosechadores || 0) || (b.total || 0) - (a.total || 0);
+  });
   const zonas = data.zonas || [];
   const rolesTotal = (t.cosechadores || 0) + (t.escaner || 0) + (t.calidad || 0) + (t.supervisorCount || 0);
   const maxCos = Math.max(1, ...supervisores.map(s => s.cosechadores || 0));
@@ -526,7 +490,7 @@ function openResumenGraficos(data) {
     <div class="dd-hero">${donutSvg(t, 150)}</div>
     <div class="dd-columns">${columnChart(t, rolesTotal, true)}</div>
 
-    <h4 class="dd-section-title">Ranking supervisores</h4>
+    <h4 class="dd-section-title">Ranking por puntualidad</h4>
     ${supervisores.length ? `
       <div class="data-rank-chart" style="margin-bottom:12px">
         ${supervisores.slice(0, 8).map((s, i) => `
@@ -534,7 +498,7 @@ function openResumenGraficos(data) {
             <span class="data-rank-row__n">${i + 1}</span>
             <div class="data-rank-row__body">
               <div class="data-rank-row__top">
-                <span>${esc(shortName(s.supervisor))}</span>
+                <span>${esc(shortName(s.supervisor))}${s.horaRegistro ? ` · ${(s.horaRegistro || '').slice(0, 5)}` : ''}</span>
                 <strong>${s.cosechadores}</strong>
               </div>
               <div class="data-bar data-bar--lg">
@@ -605,7 +569,14 @@ function showModalFor(kind) {
   }
 
   if (kind === 'supervisores' || kind === 'cosechadores') {
-    openDetail(kind === 'cosechadores' ? 'Cosechadores por supervisor' : 'Ranking de supervisores', `
+    const porPuntualidad = [...supervisores].sort((a, b) => {
+      const ha = a.horaRegistro || '99:99:99';
+      const hb = b.horaRegistro || '99:99:99';
+      if (ha !== hb) return ha < hb ? -1 : 1;
+      return (b.cosechadores || 0) - (a.cosechadores || 0) || (b.total || 0) - (a.total || 0);
+    });
+    const maxCosOrd = Math.max(1, ...porPuntualidad.map(s => s.cosechadores || 0));
+    openDetail(kind === 'cosechadores' ? 'Cosechadores por supervisor' : 'Ranking por puntualidad', `
       <div class="dd-toolbar">
         <div class="dd-stat-row dd-stat-row--grow">
           <div><span>Supervisores</span><strong>${t.supervisoresUnicos || 0}</strong></div>
@@ -614,11 +585,16 @@ function showModalFor(kind) {
         </div>
         <button type="button" class="data-card__excel dd-excel-btn" data-excel="supervisores">Excel</button>
       </div>
-      ${supervisores.length ? `
+      <p class="dd-toolbar__hint">Orden: quién registró primero (más puntual)</p>
+      ${porPuntualidad.length ? `
         ${searchHtml('Buscar nombre o DNI…')}
         <div class="dd-sup-list">
-          ${supervisores.map((s, i) => {
+          ${porPuntualidad.map((s, i) => {
             const info = infoSupervisor(s.supervisor);
+            const horaRaw = String(s.horaRegistro || s.hora || '').trim();
+            const hm = horaRaw.match(/(\d{1,2}):(\d{2})/);
+            const hora = hm ? `${String(hm[1]).padStart(2, '0')}:${hm[2]}` : '';
+            const horaOk = !!hora;
             return `
             <article class="dd-sup" data-sup-search="${esc(`${info.dni} ${info.nombre} ${s.supervisor}`)}">
               <div class="dd-sup__top">
@@ -633,9 +609,10 @@ function showModalFor(kind) {
                 </div>
               </div>
               <div class="data-bar data-bar--lg">
-                <div class="data-bar__fill data-bar__fill--green" style="width:${pct(s.cosechadores, maxCos)}%"></div>
+                <div class="data-bar__fill data-bar__fill--green" style="width:${pct(s.cosechadores, maxCosOrd)}%"></div>
               </div>
               <div class="dd-sup__meta">
+                <span class="dd-sup__hora${horaOk ? '' : ' is-empty'}">${horaOk ? `Hora ${esc(hora)}` : 'Sin hora'}</span>
                 <span>Escáner ${s.escaner}</span>
                 <span>Calidad ${s.calidad}</span>
                 <span>Sup ${s.supervisorCount}</span>
@@ -738,26 +715,29 @@ function donutSvg(t, size = 120) {
     { v: t.calidad || 0, c: ROLE_COLORS.calidad },
     { v: t.supervisorCount || 0, c: ROLE_COLORS.supervisorCount }
   ];
-  const sum = parts.reduce((a, p) => a + p.v, 0) || 1;
+  const total = parts.reduce((a, p) => a + p.v, 0);
+  const sum = total || 1; // solo para geometría (evitar /0)
   const r = 34;
   const circ = 2 * Math.PI * r;
   let offset = 0;
-  const circles = parts.map(p => {
-    const len = (p.v / sum) * circ;
-    const el = `<circle cx="50" cy="50" r="${r}" fill="none" stroke="${p.c}" stroke-width="16"
-      stroke-linecap="butt"
-      stroke-dasharray="${len} ${circ - len}" stroke-dashoffset="${-offset}"
-      transform="rotate(-90 50 50)"/>`;
-    offset += len;
-    return el;
-  }).join('');
+  const circles = total === 0
+    ? ''
+    : parts.map(p => {
+      const len = (p.v / sum) * circ;
+      const el = `<circle cx="50" cy="50" r="${r}" fill="none" stroke="${p.c}" stroke-width="16"
+        stroke-linecap="butt"
+        stroke-dasharray="${len} ${circ - len}" stroke-dashoffset="${-offset}"
+        transform="rotate(-90 50 50)"/>`;
+      offset += len;
+      return el;
+    }).join('');
   return `
     <div class="data-donut-block">
       <svg class="data-donut" viewBox="0 0 100 100" width="${size}" height="${size}">
         <circle cx="50" cy="50" r="${r}" fill="none" stroke="#eef1f5" stroke-width="16"/>
         ${circles}
         <circle cx="50" cy="50" r="22" fill="#fff"/>
-        <text x="50" y="48" text-anchor="middle" font-size="13" font-weight="800" fill="#1a2330">${sum}</text>
+        <text x="50" y="48" text-anchor="middle" font-size="13" font-weight="800" fill="#1a2330">${total}</text>
         <text x="50" y="60" text-anchor="middle" font-size="6.5" font-weight="700" fill="#6B7280">TOTAL</text>
       </svg>
       <ul class="data-donut-legend">
@@ -777,6 +757,11 @@ function shortName(s) {
 function shortZona(s) {
   const t = String(s || '');
   return t.length > 8 ? `${t.slice(0, 7)}…` : t;
+}
+
+function shortZonaFull(s) {
+  const t = String(s || '');
+  return t.length > 16 ? `${t.slice(0, 14)}…` : t;
 }
 
 function pct(n, max) {

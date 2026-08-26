@@ -111,6 +111,30 @@ export function updateHistorial(localId, patch) {
   saveHistorial(list);
 }
 
+/** Vacía cola de pendientes (evita envíos trabados) */
+export function clearQueue() {
+  saveQueue([]);
+}
+
+/** Quita del historial lo pendiente/fallido; deja solo sincronizados */
+export function clearPendingHistorial() {
+  saveHistorial(getHistorial().filter((h) => h.status === 'synced'));
+}
+
+/**
+ * Deja el almacenamiento local “como nuevo” para trabajo de campo:
+ * sin cola pendiente, sin dashboard cacheado, sin fallidos en historial.
+ */
+export async function wipeLocalWorkingState() {
+  clearQueue();
+  clearPendingHistorial();
+  try { localStorage.removeItem(STORAGE_KEYS.DASHBOARD); } catch { /* ok */ }
+  try { localStorage.removeItem(STORAGE_KEYS.QUEUE); } catch { /* ok */ }
+  await idbSet(STORAGE_KEYS.QUEUE, []);
+  await idbSet(STORAGE_KEYS.DASHBOARD, null);
+  await idbSet(STORAGE_KEYS.HISTORIAL, getHistorial());
+}
+
 export async function restoreFromIDB() {
   for (const key of Object.values(STORAGE_KEYS)) {
     if (!localStorage.getItem(key)) {

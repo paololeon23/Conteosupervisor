@@ -126,7 +126,8 @@
         </div>
 
         <!-- Personal por rol (conteo de personas) -->
-        <div class="card">
+        <div class="conteo-mid">
+        <div class="card card--personal">
           <h2 class="card__title">Personal</h2>
           <p class="card__hint">Cuántas <strong>personas</strong> hay en cada rol</p>
           <div id="roles-grid" class="num-grid"></div>
@@ -137,7 +138,7 @@
         </div>
 
         <!-- Distribución por zonas (mismas personas repartidas) -->
-        <div class="card">
+        <div class="card card--zonas">
           <h2 class="card__title">Distribución por Zonas</h2>
           <p class="card__hint">Reparta el total entre zonas.</p>
           <div id="zonas-list" class="zonas-list"></div>
@@ -160,9 +161,10 @@
             <strong id="total-zonas">0</strong>
           </div>
         </div>
+        </div>
 
         <!-- Almuerzos, Permisos, Faltas -->
-        <div class="card">
+        <div class="card card--resumen-dia">
           <h2 class="card__title">Resumen del día</h2>
           <div class="resumen-grid">
             <div class="num-field resumen--alm">
@@ -460,6 +462,34 @@
             <button type="button" id="comprobante-close" class="btn btn--primary btn--save">Listo</button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actualizar app (progreso) -->
+  <div id="refresh-app-modal" class="modal zona-modal refresh-app-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="refresh-app-title">
+    <div class="zona-sheet refresh-app-sheet">
+      <div class="zona-sheet__head">
+        <h3 id="refresh-app-title">Actualizar app</h3>
+      </div>
+      <div class="refresh-app-body">
+        <div class="refresh-app-icon" aria-hidden="true">
+          <svg class="refresh-app-spinner" viewBox="0 0 48 48" fill="none">
+            <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="3" opacity="0.15"/>
+            <path d="M44 24a20 20 0 0 0-20-20" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p id="refresh-app-status" class="refresh-app-status">Preparando actualización…</p>
+        <div class="refresh-app-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="refresh-app-bar">
+          <div class="refresh-app-bar__fill" id="refresh-app-bar-fill"></div>
+        </div>
+        <ul class="refresh-app-steps" id="refresh-app-steps">
+          <li data-step="1"><span class="refresh-app-step__dot"></span>Limpiar pendientes locales</li>
+          <li data-step="2"><span class="refresh-app-step__dot"></span>Borrar caché</li>
+          <li data-step="3"><span class="refresh-app-step__dot"></span>Buscar nueva versión</li>
+          <li data-step="4"><span class="refresh-app-step__dot"></span>Recargar app limpia</li>
+        </ul>
+        <p class="refresh-app-hint">No cierre esta ventana. La app se reiniciará sola.</p>
       </div>
     </div>
   </div>
