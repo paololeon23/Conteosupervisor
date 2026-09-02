@@ -38,6 +38,7 @@ export const SUPERVISORES = [
   { dni: '74291763', nombre: 'HUARIPATA RAMIREZ PATRICK ALEJANDRO', fundo: 'LICAPA' },
   { dni: '74317270', nombre: 'PASTOR CUEVA SORAYDA ARACELY', fundo: 'LICAPA' },
   { dni: '74942842', nombre: 'FUENTES VALIENTE DEIMAR ULISES', fundo: 'LICAPA' },
+  { dni: '74959924', nombre: 'ARMAS DIAZ CRISTIAN DANIEL', fundo: 'LICAPA' },
   { dni: '74984893', nombre: 'BAZAN ÑIQUIN JOSE GABRIEL', fundo: 'LICAPA' },
   { dni: '75075892', nombre: 'SALAZAR AURORA INGRID JHOANA', fundo: 'LICAPA' },
   { dni: '75078541', nombre: 'LEON VARGAS DEYSI TATIANA', fundo: 'LICAPA' },
