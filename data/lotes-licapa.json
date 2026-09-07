@@ -201,7 +201,7 @@
   { "lote": "205", "modulo": "M10", "turno": "6", "etapa": "Licapa II", "codLote": "M10T6LT205", "variedad": "Sekoya Pop" },
   { "lote": "206", "modulo": "M10", "turno": "7", "etapa": "Licapa II", "codLote": "M10T7LT206", "variedad": "Sekoya Pop" },
   { "lote": "207", "modulo": "M10", "turno": "7", "etapa": "Licapa II", "codLote": "M10T7LT207", "variedad": "Sekoya Pop" },
-  { "lote": "208 B", "modulo": "M10", "turno": "11", "etapa": "Licapa II", "codLote": "M10T11LT208B", "variedad": "Sekoya Pop" },
+  { "lote": "208B", "modulo": "M10", "turno": "11", "etapa": "Licapa II", "codLote": "M10T11LT208B", "variedad": "Sekoya Pop" },
   { "lote": "208A", "modulo": "M10", "turno": "11", "etapa": "Licapa II", "codLote": "M10T11LT208A", "variedad": "Sekoya Pop" },
   { "lote": "209", "modulo": "M10", "turno": "11", "etapa": "Licapa II", "codLote": "M10T11LT209", "variedad": "Sekoya Pop" },
   { "lote": "210", "modulo": "M10", "turno": "11", "etapa": "Licapa II", "codLote": "M10T11LT210", "variedad": "Sekoya Pop" },

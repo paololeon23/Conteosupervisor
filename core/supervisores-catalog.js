@@ -12,6 +12,7 @@ export const SUPERVISORES = [
   { dni: '48446147', nombre: 'HILARIO AVALOS EVELYN', fundo: 'LICAPA' },
   { dni: '48533707', nombre: 'JULCA GAMBOA DILMER ELICER', fundo: 'LICAPA' },
   { dni: '48590607', nombre: 'OLIVARES AGUILAR ELCIRA', fundo: 'LICAPA' },
+  { dni: '60036602', nombre: 'HUAMAN GARCIA EMERZON ALDAHIR', fundo: 'LICAPA' },
   { dni: '60467254', nombre: 'RIOS MEDINA DAHIRA MICAELA', fundo: 'LICAPA' },
   { dni: '60741145', nombre: 'PAREDES GALARRETA CRISTHIAN JEANPIER', fundo: 'LICAPA' },
   { dni: '60836174', nombre: 'REBAZA SALINAS ALEXANDER YONATHAN', fundo: 'LICAPA' },
