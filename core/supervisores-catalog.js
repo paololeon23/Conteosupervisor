@@ -29,6 +29,7 @@ export const SUPERVISORES = [
   { dni: '71405307', nombre: 'ANTICONA SOTO CRISTHIAN ALEXANDER', fundo: 'LICAPA' },
   { dni: '71806261', nombre: 'LEON TRIGOSO JHONY ANDRONICO', fundo: 'LICAPA' },
   { dni: '71880419', nombre: 'CUEVA GUILLERMO KENNET ANDERSON', fundo: 'LICAPA' },
+  { dni: '72009029', nombre: 'LOPES ALFARO CARMEN', fundo: 'LICAPA' },
   { dni: '72911037', nombre: 'VASQUEZ COTRINA EVELYN RUVIT', fundo: 'LICAPA' },
   { dni: '72961122', nombre: 'TORRES GONZALEZ DE AQUINO MARTHA KARINA', fundo: 'LICAPA' },
   { dni: '73503134', nombre: 'DE LA CRUZ SAAVEDRA JHONATAN JOEL', fundo: 'LICAPA' },
