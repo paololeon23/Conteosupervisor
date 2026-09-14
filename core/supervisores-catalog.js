@@ -2,6 +2,7 @@
 
 export const SUPERVISORES = [
   { dni: '42493820', nombre: 'VASQUEZ DELGADO ROBERTO CARLOS', fundo: 'LICAPA' },
+  { dni: '42992833', nombre: 'PONCE RUIZ ISIDRO', fundo: 'LICAPA' },
   { dni: '43558894', nombre: 'DIAZ VARAS FANNY DEL MILAGRO', fundo: 'LICAPA' },
   { dni: '43583858', nombre: 'PLASENCIA CORREA NADIA YVONNE', fundo: 'LICAPA' },
   { dni: '44141396', nombre: 'VASQUEZ URBINA EDIN CLAY', fundo: 'LICAPA' },
