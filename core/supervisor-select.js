@@ -1,4 +1,4 @@
-import { buscarPorDni, limpiarDni } from './supervisores-catalog.js';
+import { buscarPorDni, limpiarDni, addCustomSupervisor } from './supervisores-catalog.js';
 import { consultarConteo } from './api.js';
 import { isOnline } from './network.js';
 import { $, toast, todayStr } from './utils.js';
@@ -34,6 +34,27 @@ export function initSupervisorSelect(onChange) {
       identificar();
     }
   });
+
+  const nombreAlta = $('#supervisor-alta-nombre');
+  const btnAlta = $('#btn-supervisor-alta');
+  if (nombreAlta && !nombreAlta.dataset.bound) {
+    nombreAlta.dataset.bound = '1';
+    nombreAlta.addEventListener('input', () => {
+      nombreAlta.value = String(nombreAlta.value || '').toLocaleUpperCase('es-PE');
+      const msg = $('#supervisor-alta-msg');
+      if (msg) msg.hidden = true;
+    });
+    nombreAlta.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        registrarSupervisorNuevo();
+      }
+    });
+  }
+  if (btnAlta && !btnAlta.dataset.bound) {
+    btnAlta.dataset.bound = '1';
+    btnAlta.addEventListener('click', () => registrarSupervisorNuevo());
+  }
 }
 
 const identificarDebounced = (() => {
@@ -85,6 +106,7 @@ export async function identificar() {
   if (dni.length < 8) {
     setEstado('Ingrese su DNI (8 dígitos)', 'warn');
     limpiarIdentidad(false);
+    setAltaVisible(false);
     return null;
   }
 
@@ -94,10 +116,13 @@ export async function identificar() {
     modoEditar = false;
     setHidden('', '');
     setNombre('');
-    setEstado('DNI no está en la lista de supervisores', 'error');
+    setEstado('DNI no está en la lista — puede registrarlo abajo', 'warn');
+    setAltaVisible(true);
     notify();
     return null;
   }
+
+  setAltaVisible(false);
 
   actual = found;
   setHidden(found.dni, found.nombre);
@@ -164,6 +189,7 @@ export function resetSupervisor() {
   setHidden('', '');
   setNombre('');
   setEstado('');
+  setAltaVisible(false);
   notify();
 }
 
@@ -177,6 +203,50 @@ function limpiarIdentidad(clearInput) {
   setHidden('', '');
   setNombre('');
   notify();
+}
+
+function setAltaVisible(show) {
+  const box = $('#supervisor-alta');
+  if (!box) return;
+  box.hidden = !show;
+  if (!show) {
+    const input = $('#supervisor-alta-nombre');
+    const msg = $('#supervisor-alta-msg');
+    if (input) input.value = '';
+    if (msg) {
+      msg.hidden = true;
+      msg.textContent = '';
+    }
+  } else {
+    $('#supervisor-alta-nombre')?.focus();
+  }
+}
+
+function setAltaMsg(text, type = 'error') {
+  const el = $('#supervisor-alta-msg');
+  if (!el) return;
+  if (!text) {
+    el.hidden = true;
+    el.textContent = '';
+    return;
+  }
+  el.hidden = false;
+  el.textContent = text;
+  el.className = `zona-nueva__msg zona-nueva__msg--${type}`;
+}
+
+export async function registrarSupervisorNuevo() {
+  const dni = limpiarDni($('#supervisor-dni')?.value);
+  const nombre = $('#supervisor-alta-nombre')?.value;
+  const result = addCustomSupervisor(dni, nombre);
+  if (!result.ok) {
+    setAltaMsg(result.msg, 'error');
+    toast(result.msg, 'error');
+    return null;
+  }
+  setAltaMsg('Registrado en este celular', 'ok');
+  toast('Supervisor registrado — complete su conteo', 'success');
+  return identificar();
 }
 
 function setHidden(dni, nombre) {

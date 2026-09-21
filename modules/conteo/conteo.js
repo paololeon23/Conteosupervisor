@@ -538,7 +538,7 @@ function validarPayload(payload) {
     toast('Ingrese su DNI de supervisor', 'error');
     return false;
   }
-  if (!payload.supervisor) { toast('DNI no válido en la lista', 'error'); return false; }
+  if (!payload.supervisor) { toast('Identifíquese con su DNI o registre al supervisor', 'error'); return false; }
   if (!payload.grupoCosecha) { toast('Seleccione el grupo', 'error'); return false; }
   if (!payload.lote) { toast('Seleccione el lote', 'error'); return false; }
   if (!payload.modulo || !payload.turno) { toast('Seleccione lote para módulo/turno', 'error'); return false; }

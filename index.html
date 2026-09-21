@@ -112,6 +112,14 @@
             <input type="hidden" id="supervisor">
             <p id="supervisor-nombre" class="pick-preview" hidden></p>
             <p id="supervisor-estado" class="sup-estado" hidden></p>
+            <div id="supervisor-alta" class="sup-alta" hidden>
+              <label for="supervisor-alta-nombre">Registrar supervisor nuevo <span class="zona-nueva__tag">en este celular</span></label>
+              <div class="zona-nueva__row">
+                <input type="text" id="supervisor-alta-nombre" maxlength="80" placeholder="APELLIDOS Y NOMBRES" autocomplete="off" autocapitalize="characters">
+                <button type="button" id="btn-supervisor-alta" class="btn btn--zona-nueva">Registrar</button>
+              </div>
+              <p id="supervisor-alta-msg" class="zona-nueva__msg" hidden></p>
+            </div>
           </div>
           <div class="field">
             <label>Lote</label>
