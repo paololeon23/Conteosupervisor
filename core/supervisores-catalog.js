@@ -62,8 +62,33 @@ export const SUPERVISORES = [
 /** @deprecated usar SUPERVISORES */
 export const SUPERVISORES_FIJOS = SUPERVISORES.map((s) => s.nombre);
 
+const CUSTOM_KEY = 'qb_supervisores_custom_v1';
+const NOMBRE_VALID_RE = /^[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ ]*$/;
+
+function getCustomSupervisores() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]');
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((s) => s && limpiarDni(s.dni).length >= 8 && String(s.nombre || '').trim())
+      .map((s) => ({
+        dni: limpiarDni(s.dni),
+        nombre: String(s.nombre).trim().toLocaleUpperCase('es-PE'),
+        fundo: String(s.fundo || 'LICAPA').trim().toUpperCase() || 'LICAPA'
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function listaSupervisores() {
+  const seen = new Set(SUPERVISORES.map((s) => s.dni));
+  const custom = getCustomSupervisores().filter((s) => !seen.has(s.dni));
+  return [...SUPERVISORES, ...custom];
+}
+
 export function getSupervisores() {
-  return SUPERVISORES.map((s) => ({ ...s }));
+  return listaSupervisores().map((s) => ({ ...s }));
 }
 
 export function limpiarDni(raw) {
@@ -73,7 +98,38 @@ export function limpiarDni(raw) {
 export function buscarPorDni(dni) {
   const code = limpiarDni(dni);
   if (code.length < 8) return null;
-  return SUPERVISORES.find((s) => s.dni === code) || null;
+  return listaSupervisores().find((s) => s.dni === code) || null;
+}
+
+function normalizarNombreAlta(nombre) {
+  return String(nombre || '').trim().toLocaleUpperCase('es-PE').replace(/\s+/g, ' ');
+}
+
+/**
+ * Alta local de supervisor (este celular). No modifica el catálogo fijo.
+ * @returns {{ ok: boolean, msg?: string, supervisor?: { dni: string, nombre: string, fundo: string } }}
+ */
+export function addCustomSupervisor(dni, nombre) {
+  const code = limpiarDni(dni);
+  if (code.length < 8) return { ok: false, msg: 'Ingrese un DNI de 8 dígitos' };
+
+  const nom = normalizarNombreAlta(nombre);
+  if (!nom) return { ok: false, msg: 'Escriba apellidos y nombres' };
+  if (nom.length < 5) return { ok: false, msg: 'Nombre demasiado corto' };
+  if (nom.length > 80) return { ok: false, msg: 'Nombre demasiado largo' };
+  if (!NOMBRE_VALID_RE.test(nom)) return { ok: false, msg: 'Solo letras y espacios' };
+  if (nom.split(' ').filter(Boolean).length < 2) {
+    return { ok: false, msg: 'Escriba apellidos y nombres' };
+  }
+
+  const existente = buscarPorDni(code);
+  if (existente) return { ok: true, supervisor: existente };
+
+  const supervisor = { dni: code, nombre: nom, fundo: 'LICAPA' };
+  const custom = getCustomSupervisores().filter((s) => s.dni !== code);
+  custom.push(supervisor);
+  localStorage.setItem(CUSTOM_KEY, JSON.stringify(custom));
+  return { ok: true, supervisor };
 }
 
 /** Extrae DNI del campo Supervisor en Sheet: "42493820 · NOMBRE" */
@@ -118,12 +174,13 @@ export function matchSupervisorFijo(nombreReportado) {
   const compact = n.replace(/\s+/g, '');
   if (!n) return null;
 
-  for (const s of SUPERVISORES) {
+  const lista = listaSupervisores();
+  for (const s of lista) {
     const f = normalizarNombreSup(s.nombre);
     if (f === n || f.replace(/\s+/g, '') === compact) return s;
   }
 
-  const candidatos = SUPERVISORES.filter((s) => {
+  const candidatos = lista.filter((s) => {
     const f = normalizarNombreSup(s.nombre);
     return f.includes(n) || n.includes(f);
   });
@@ -165,7 +222,7 @@ export function validarSupervisores(reportados = []) {
   return { presentes, faltan, total: SUPERVISORES.length };
 }
 
-export function filtrarSupervisores(query, lista = SUPERVISORES) {
+export function filtrarSupervisores(query, lista = listaSupervisores()) {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return [...lista];
   const digits = q.replace(/\D/g, '');
