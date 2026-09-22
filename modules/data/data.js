@@ -11,6 +11,7 @@ import {
   matchSupervisorFijo
 } from '../../core/supervisores-catalog.js';
 import { descargarExcelSeccion } from '../../core/export-excel.js';
+import { totalesDashboardEnVivo } from '../../core/totals.js';
 
 let bound = false;
 let loading = false;
@@ -27,6 +28,14 @@ const ROLE_COLORS = {
   calidad: '#F7941E',
   supervisorCount: '#D61F26'
 };
+
+function nSupervisores(t = {}) {
+  return Number(t.supervisoresUnicos) || 0;
+}
+
+function totalRolesVisible(t = {}) {
+  return Number(t.total) || 0;
+}
 
 function dashStorageKey(modo) {
   return `${STORAGE_KEYS.DASHBOARD}_v2_${modo}`;
@@ -256,6 +265,10 @@ function bindDetailExcel() {
   });
 }
 
+function faltaDistribucion(s) {
+  return !(Number(s?.cosechadores) > 0);
+}
+
 function infoSupervisor(raw) {
   const matched = matchSupervisorFijo(raw);
   const dni = extraerDni(raw) || matched?.dni || '';
@@ -350,13 +363,13 @@ function render(data) {
   const root = $('#data-root');
   if (!root) return;
 
-  const t = data.totales || {};
+  const t = totalesDashboardEnVivo(data);
   const supervisores = Array.isArray(data.supervisores) ? data.supervisores : [];
   const zonas = Array.isArray(data.zonas) ? data.zonas : [];
   const topSup = supervisores.slice(0, 3);
   const topZonas = zonas.slice(0, 3);
   const maxZona = Math.max(1, ...topZonas.map(z => z.cantidad || 0));
-  const rolesTotal = (t.cosechadores || 0) + (t.escaner || 0) + (t.calidad || 0) + (t.supervisorCount || 0);
+  const rolesTotal = totalRolesVisible(t);
 
   root.innerHTML = `
     <p class="data-hint-tap">4 gráficos compactos · toque para detalle</p>
@@ -375,7 +388,7 @@ function render(data) {
 
       <section class="data-card data-card--tap data-card--compact" data-open="supervisores">
         <div class="data-card__head">
-          <h3 class="data-card__title">Top 3 supervisores</h3>
+          <h3 class="data-card__title">Puntualidad</h3>
           <div class="data-card__actions">
             <button type="button" class="data-card__excel" data-excel="supervisores" aria-label="Excel supervisores">Excel</button>
             <span class="data-card__action">Todos</span>
@@ -386,7 +399,7 @@ function render(data) {
             ${topSup.map((s, i) => `
               <div class="data-mini-row">
                 <span class="data-mini-rank">${i + 1}</span>
-                <span class="data-mini-name">${esc(shortName(s.supervisor))}</span>
+                <span class="data-mini-name" title="${esc(nombreVisible(s.supervisor))}">${esc(nombreVisible(s.supervisor))}</span>
                 <strong>${s.cosechadores}</strong>
               </div>
             `).join('')}
@@ -406,7 +419,7 @@ function render(data) {
           <div class="data-mini-list">
             ${topZonas.map((z) => `
               <div class="data-mini-row">
-                <span class="data-mini-name">${esc(shortZonaFull(z.zona))}</span>
+                <span class="data-mini-name" title="${esc(z.zona)}">${esc(z.zona)}</span>
                 <div class="data-mini-bar"><i style="width:${pct(z.cantidad, maxZona)}%"></i></div>
                 <strong>${z.cantidad}</strong>
               </div>
@@ -421,7 +434,7 @@ function render(data) {
           <span class="data-card__action">Ampliar</span>
         </div>
         <div class="data-kpi-trio">
-          <div><span>Personal</span><strong>${t.total || rolesTotal}</strong></div>
+          <div><span>Personal</span><strong>${rolesTotal}</strong></div>
           <div><span>Conteos</span><strong>${t.conteos || 0}</strong></div>
           <div><span>Almuerzos</span><strong>${t.almuerzos || 0}</strong></div>
         </div>
@@ -460,7 +473,7 @@ function bindChartClicks() {
 
 /** Modal principal: gráficos del resumen + opción de compartir imagen */
 function openResumenGraficos(data) {
-  const t = data.totales || {};
+  const t = totalesDashboardEnVivo(data);
   const supervisores = [...(data.supervisores || [])].sort((a, b) => {
     const ha = a.horaRegistro || '99:99:99';
     const hb = b.horaRegistro || '99:99:99';
@@ -468,7 +481,7 @@ function openResumenGraficos(data) {
     return (b.cosechadores || 0) - (a.cosechadores || 0) || (b.total || 0) - (a.total || 0);
   });
   const zonas = data.zonas || [];
-  const rolesTotal = (t.cosechadores || 0) + (t.escaner || 0) + (t.calidad || 0) + (t.supervisorCount || 0);
+  const rolesTotal = totalRolesVisible(t);
   const maxCos = Math.max(1, ...supervisores.map(s => s.cosechadores || 0));
   const maxZona = Math.max(1, ...zonas.map(z => z.cantidad || 0));
   const fechaLabel = data.fecha === 'all'
@@ -483,7 +496,7 @@ function openResumenGraficos(data) {
       <div class="dd-stat dd-stat--green"><span>Cosechadores</span><strong>${t.cosechadores || 0}</strong></div>
       <div class="dd-stat dd-stat--blue"><span>Escáner</span><strong>${t.escaner || 0}</strong></div>
       <div class="dd-stat dd-stat--amber"><span>Calidad</span><strong>${t.calidad || 0}</strong></div>
-      <div class="dd-stat dd-stat--grand"><span>Total junto</span><strong>${t.total || rolesTotal}</strong></div>
+      <div class="dd-stat dd-stat--grand"><span>Total junto</span><strong>${rolesTotal}</strong></div>
     </div>
 
     <h4 class="dd-section-title">Por rol</h4>
@@ -539,10 +552,10 @@ function openResumenGraficos(data) {
 }
 
 function showModalFor(kind) {
-  const t = lastData.totales || {};
+  const t = totalesDashboardEnVivo(lastData);
   const supervisores = lastData.supervisores || [];
   const zonas = lastData.zonas || [];
-  const rolesTotal = (t.cosechadores || 0) + (t.escaner || 0) + (t.calidad || 0) + (t.supervisorCount || 0);
+  const rolesTotal = totalRolesVisible(t);
   const maxCos = Math.max(1, ...supervisores.map(s => s.cosechadores || 0));
   const maxZona = Math.max(1, ...zonas.map(z => z.cantidad || 0));
 
@@ -560,9 +573,9 @@ function showModalFor(kind) {
         ${roleDetail('Cosechadores', t.cosechadores || 0, rolesTotal, ROLE_COLORS.cosechadores)}
         ${roleDetail('Escáner', t.escaner || 0, rolesTotal, ROLE_COLORS.escaner)}
         ${roleDetail('Calidad', t.calidad || 0, rolesTotal, ROLE_COLORS.calidad)}
-        ${roleDetail('Supervisor', t.supervisorCount || 0, rolesTotal, ROLE_COLORS.supervisorCount)}
+        ${roleDetail('Supervisor', nSupervisores(t), rolesTotal, ROLE_COLORS.supervisorCount)}
       </div>
-      <div class="dd-total">Total personal <strong>${t.total || rolesTotal}</strong></div>
+      <div class="dd-total">Total personal <strong>${rolesTotal}</strong></div>
     `);
     bindDetailExcel();
     return;
@@ -595,12 +608,16 @@ function showModalFor(kind) {
             const hm = horaRaw.match(/(\d{1,2}):(\d{2})/);
             const hora = hm ? `${String(hm[1]).padStart(2, '0')}:${hm[2]}` : '';
             const horaOk = !!hora;
+            const faltaDist = faltaDistribucion(s);
             return `
             <article class="dd-sup" data-sup-search="${esc(`${info.dni} ${info.nombre} ${s.supervisor}`)}">
               <div class="dd-sup__top">
                 <span class="dd-sup__rank">#${i + 1}</span>
                 <div class="dd-sup__who">
-                  <strong>${esc(info.nombre)}</strong>
+                  <div class="dd-sup__who-head">
+                    <strong>${esc(info.nombre)}</strong>
+                    ${faltaDist ? `<button type="button" class="dd-sup__faltan-dist">Falta su distribución</button>` : ''}
+                  </div>
                   <span>${info.dni ? `${esc(info.dni)} · ` : ''}${s.conteos} conteo${s.conteos === 1 ? '' : 's'} · ${s.grupos || 0} grupo${(s.grupos || 0) === 1 ? '' : 's'}</span>
                 </div>
                 <div class="dd-sup__cos">
@@ -660,7 +677,7 @@ function showModalFor(kind) {
       <div class="dd-stat dd-stat--blue"><span>Escáner</span><strong>${t.escaner || 0}</strong></div>
       <div class="dd-stat dd-stat--amber"><span>Calidad</span><strong>${t.calidad || 0}</strong></div>
       <div class="dd-stat dd-stat--ink"><span>Rol supervisor</span><strong>${t.supervisorCount || 0}</strong></div>
-      <div class="dd-stat dd-stat--grand"><span>Total junto</span><strong>${t.total || rolesTotal}</strong></div>
+      <div class="dd-stat dd-stat--grand"><span>Total junto</span><strong>${rolesTotal}</strong></div>
     </div>
     <div class="dd-mini">
       <span>Almuerzos ${t.almuerzos || 0}</span>
@@ -690,7 +707,7 @@ function columnChart(t, rolesTotal, tall) {
     { label: 'Cos', v: t.cosechadores || 0, c: ROLE_COLORS.cosechadores },
     { label: 'Esc', v: t.escaner || 0, c: ROLE_COLORS.escaner },
     { label: 'Cal', v: t.calidad || 0, c: ROLE_COLORS.calidad },
-    { label: 'Sup', v: t.supervisorCount || 0, c: ROLE_COLORS.supervisorCount }
+    { label: 'Sup', v: nSupervisores(t), c: ROLE_COLORS.supervisorCount }
   ];
   const max = Math.max(1, ...cols.map(c => c.v), rolesTotal ? 0 : 1);
   const h = tall ? 120 : 88;
@@ -713,10 +730,10 @@ function donutSvg(t, size = 120) {
     { v: t.cosechadores || 0, c: ROLE_COLORS.cosechadores },
     { v: t.escaner || 0, c: ROLE_COLORS.escaner },
     { v: t.calidad || 0, c: ROLE_COLORS.calidad },
-    { v: t.supervisorCount || 0, c: ROLE_COLORS.supervisorCount }
+    { v: nSupervisores(t), c: ROLE_COLORS.supervisorCount }
   ];
   const total = parts.reduce((a, p) => a + p.v, 0);
-  const sum = total || 1; // solo para geometría (evitar /0)
+  const sum = total || 1;
   const r = 34;
   const circ = 2 * Math.PI * r;
   let offset = 0;
@@ -741,10 +758,10 @@ function donutSvg(t, size = 120) {
         <text x="50" y="60" text-anchor="middle" font-size="6.5" font-weight="700" fill="#6B7280">TOTAL</text>
       </svg>
       <ul class="data-donut-legend">
-        <li><i style="background:${ROLE_COLORS.cosechadores}"></i>Cosech. ${t.cosechadores || 0}</li>
-        <li><i style="background:${ROLE_COLORS.escaner}"></i>Escáner ${t.escaner || 0}</li>
-        <li><i style="background:${ROLE_COLORS.calidad}"></i>Calidad ${t.calidad || 0}</li>
-        <li><i style="background:${ROLE_COLORS.supervisorCount}"></i>Sup. ${t.supervisorCount || 0}</li>
+        <li><i style="background:${ROLE_COLORS.cosechadores}"></i><span>Cosechadores</span><strong>${t.cosechadores || 0}</strong></li>
+        <li><i style="background:${ROLE_COLORS.escaner}"></i><span>Escáner</span><strong>${t.escaner || 0}</strong></li>
+        <li><i style="background:${ROLE_COLORS.calidad}"></i><span>Calidad</span><strong>${t.calidad || 0}</strong></li>
+        <li><i style="background:${ROLE_COLORS.supervisorCount}"></i><span>Supervisor</span><strong>${nSupervisores(t)}</strong></li>
       </ul>
     </div>`;
 }

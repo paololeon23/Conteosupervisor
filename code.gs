@@ -90,6 +90,10 @@
       d = d || {};
       var localId = String(d.localId || '').trim();
       var editar = d.editar === true || d.editar === 'true' || d.editar === 1;
+      var dni = limpiarDni_(d.codSupervisor || d.dni || extraerDni_(d.supervisor));
+      if (!dni) {
+        return { ok: false, message: 'Falta DNI del supervisor' };
+      }
 
       if (!editar && localId && yaGuardado_(localId)) {
         return {
@@ -116,11 +120,7 @@
         var hoja = obtenerHoja_();
         asegurarEncabezados_(hoja);
 
-        var dni = limpiarDni_(d.codSupervisor || d.dni || extraerDni_(d.supervisor));
         var nombreSup = texto_(nombreSinDni_(d.supervisor) || d.supervisorNombre || '');
-        if (!dni) {
-          return { ok: false, message: 'Falta DNI del supervisor' };
-        }
         if (!nombreSup) nombreSup = 'SUPERVISOR ' + dni;
 
         var fecha = d.fecha || hoy_();
@@ -453,7 +453,8 @@
               total: 0,
               conteos: 0,
               grupos: {},
-              horaRegistro: ''
+              horaRegistro: '',
+              zonasCant: 0
             };
           }
           var s = bySup[key];
@@ -483,6 +484,28 @@
           var cant = num_(row[COL.CANTIDAD]);
           if (!zona || cant <= 0) continue;
           byZona[zona] = (byZona[zona] || 0) + cant;
+
+          var dniZ = limpiarDni_(row[COL.DNI]);
+          var nombreZ = String(row[COL.SUPERVISOR] || '').trim().toUpperCase();
+          var labelZ = dniZ ? (dniZ + ' · ' + (nombreZ || dniZ)) : nombreZ;
+          var keyZ = dniZ || labelZ;
+          if (keyZ) {
+            if (!bySup[keyZ]) {
+              bySup[keyZ] = {
+                supervisor: labelZ,
+                cosechadores: 0,
+                escaner: 0,
+                calidad: 0,
+                supervisorCount: 0,
+                total: 0,
+                conteos: 0,
+                grupos: {},
+                horaRegistro: '',
+                zonasCant: 0
+              };
+            }
+            bySup[keyZ].zonasCant = (bySup[keyZ].zonasCant || 0) + cant;
+          }
         }
       }
 
@@ -503,7 +526,9 @@
           total: item.total,
           conteos: item.conteos,
           grupos: nGrupos,
-          horaRegistro: item.horaRegistro || ''
+          horaRegistro: item.horaRegistro || '',
+          zonasCant: item.zonasCant || 0,
+          sinDistribucion: !(item.zonasCant > 0)
         });
       }
       // Más puntual primero (hora de registro más temprana)

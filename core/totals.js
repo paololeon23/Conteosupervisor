@@ -23,6 +23,37 @@ export function calcTotalPersonalFromPayload(d = {}) {
   });
 }
 
+/**
+ * Totales del dashboard en vivo: suma la lista de quien ya envió.
+ * No usa t.total pegado del servidor.
+ */
+export function totalesDashboardEnVivo(data = {}) {
+  const lista = Array.isArray(data.supervisores) ? data.supervisores : [];
+  const base = data.totales || {};
+  const fromList = lista.length > 0;
+
+  const cosechadores = fromList ? lista.reduce((a, s) => a + num(s.cosechadores), 0) : num(base.cosechadores);
+  const escaner = fromList ? lista.reduce((a, s) => a + num(s.escaner), 0) : num(base.escaner);
+  const calidad = fromList ? lista.reduce((a, s) => a + num(s.calidad), 0) : num(base.calidad);
+  const supervisorRol = fromList ? lista.reduce((a, s) => a + num(s.supervisorCount), 0) : num(base.supervisorCount);
+  const supervisoresUnicos = fromList ? lista.length : num(base.supervisoresUnicos);
+  const conteos = fromList ? lista.reduce((a, s) => a + num(s.conteos), 0) : num(base.conteos);
+
+  return {
+    ...base,
+    cosechadores,
+    escaner,
+    calidad,
+    supervisorCount: supervisorRol,
+    supervisoresUnicos,
+    conteos,
+    total: cosechadores + escaner + calidad + supervisoresUnicos,
+    almuerzos: num(base.almuerzos),
+    permisos: num(base.permisos),
+    faltas: num(base.faltas)
+  };
+}
+
 export function calcTotalZonasFromList(zonas = []) {
   return zonas.reduce((s, z) => s + num(z.cantidad), 0);
 }

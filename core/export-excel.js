@@ -6,6 +6,7 @@ import {
   validarSupervisores,
   matchSupervisorFijo
 } from './supervisores-catalog.js';
+import { totalesDashboardEnVivo } from './totals.js';
 
 function xmlEsc(s) {
   return String(s ?? '')
@@ -67,21 +68,20 @@ function sheetXml(rows) {
 }
 
 function tableRoles(data) {
-  const t = data.totales || {};
-  const total = (t.cosechadores || 0) + (t.escaner || 0) + (t.calidad || 0) + (t.supervisorCount || 0);
+  const t = totalesDashboardEnVivo(data);
   return [
     ['Rol', 'Cantidad'],
-    ['Cosechadores', t.cosechadores || 0],
-    ['Escáner', t.escaner || 0],
-    ['Calidad', t.calidad || 0],
-    ['Supervisor', t.supervisorCount || 0],
-    ['Total', t.total || total]
+    ['Cosechadores', t.cosechadores],
+    ['Escáner', t.escaner],
+    ['Calidad', t.calidad],
+    ['Supervisor', t.supervisoresUnicos],
+    ['Total', t.total]
   ];
 }
 
 /** Misma data que el modal "Ranking de supervisores" */
 function tableSupervisores(data, modo = 'hoy') {
-  const t = data.totales || {};
+  const t = totalesDashboardEnVivo(data);
   const supervisores = Array.isArray(data.supervisores) ? data.supervisores : [];
   const { fechaLabel, rango } = metaRango(data, modo);
 
@@ -89,9 +89,9 @@ function tableSupervisores(data, modo = 'hoy') {
     ['Ranking por puntualidad', '', '', '', '', '', '', '', '', '', ''],
     ['Rango', rango, '', '', '', '', '', '', '', '', ''],
     ['Fecha', fechaLabel, '', '', '', '', '', '', '', '', ''],
-    ['Supervisores', t.supervisoresUnicos || 0, '', '', '', '', '', '', '', '', ''],
-    ['Cosechadores', t.cosechadores || 0, '', '', '', '', '', '', '', '', ''],
-    ['Conteos', t.conteos || 0, '', '', '', '', '', '', '', '', ''],
+    ['Supervisores', t.supervisoresUnicos, '', '', '', '', '', '', '', '', ''],
+    ['Cosechadores', t.cosechadores, '', '', '', '', '', '', '', '', ''],
+    ['Conteos', t.conteos, '', '', '', '', '', '', '', '', ''],
     [],
     [
       '#',
@@ -166,19 +166,19 @@ function tableFaltan(data) {
 
 function tableResumen(data, modo) {
   const { fechaLabel, rango } = metaRango(data, modo);
-  const t = data.totales || {};
+  const t = totalesDashboardEnVivo(data);
   const faltan = supervisoresFaltantes(data.supervisores || []);
   return [
     ['Campo', 'Valor'],
     ['Rango', rango],
     ['Fecha', fechaLabel],
-    ['Supervisores reportaron', t.supervisoresUnicos || 0],
-    ['Conteos', t.conteos || 0],
-    ['Cosechadores', t.cosechadores || 0],
-    ['Escáner', t.escaner || 0],
-    ['Calidad', t.calidad || 0],
-    ['Rol supervisor', t.supervisorCount || 0],
-    ['Total personal', t.total || 0],
+    ['Supervisores reportaron', t.supervisoresUnicos],
+    ['Conteos', t.conteos],
+    ['Cosechadores', t.cosechadores],
+    ['Escáner', t.escaner],
+    ['Calidad', t.calidad],
+    ['Rol supervisor', t.supervisorCount],
+    ['Total personal', t.total],
     ['Faltan reportar', faltan.length]
   ];
 }
