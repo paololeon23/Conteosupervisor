@@ -71,10 +71,13 @@ function pulseTotal(el) {
 }
 
 function updateTotals() {
-  const tp = calcTotalRoles();
+  const roles = rolesPayload();
+  const tp = calcTotalPersonalFromRoles(roles);
   const tz = calcTotalZonas();
   const elPersonal = document.getElementById('total-personal');
   const elZonas = document.getElementById('total-zonas');
+  const formPersonal = document.getElementById('total-personal-formula');
+  const formZonas = document.getElementById('total-zonas-formula');
   const boxPersonal = document.getElementById('total-personal-box');
   const boxZonas = document.getElementById('total-zonas-box');
 
@@ -82,9 +85,24 @@ function updateTotals() {
     elPersonal.textContent = String(tp);
     pulseTotal(elPersonal);
   }
+  if (formPersonal) {
+    const show = tp > 0;
+    formPersonal.hidden = !show;
+    formPersonal.textContent = show
+      ? `${roles.cosechadores} + ${roles.escaner} + ${roles.calidad} + ${roles.supervisorCount}`
+      : '';
+  }
   if (elZonas) {
     elZonas.textContent = tp > 0 ? `${tz}/${tp}` : String(tz);
     pulseTotal(elZonas);
+  }
+  if (formZonas) {
+    const partes = zonasAgregadas
+      .map((z) => Number(z.cantidad) || 0)
+      .filter((n) => n > 0);
+    const show = partes.length > 0;
+    formZonas.hidden = !show;
+    formZonas.textContent = show ? partes.join(' + ') : '';
   }
 
   const match = totalsCoinciden(tp, tz);

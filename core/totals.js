@@ -29,6 +29,7 @@ export function calcTotalPersonalFromPayload(d = {}) {
  */
 export function totalesDashboardEnVivo(data = {}) {
   const lista = Array.isArray(data.supervisores) ? data.supervisores : [];
+  const zonas = Array.isArray(data.zonas) ? data.zonas : [];
   const base = data.totales || {};
   const fromList = lista.length > 0;
 
@@ -36,8 +37,10 @@ export function totalesDashboardEnVivo(data = {}) {
   const escaner = fromList ? lista.reduce((a, s) => a + num(s.escaner), 0) : num(base.escaner);
   const calidad = fromList ? lista.reduce((a, s) => a + num(s.calidad), 0) : num(base.calidad);
   const supervisorRol = fromList ? lista.reduce((a, s) => a + num(s.supervisorCount), 0) : num(base.supervisorCount);
-  const supervisoresUnicos = fromList ? lista.length : num(base.supervisoresUnicos);
-  const conteos = fromList ? lista.reduce((a, s) => a + num(s.conteos), 0) : num(base.conteos);
+  const conteos = fromList ? lista.reduce((a, s) => a + Math.max(num(s.conteos), 1), 0) : num(base.conteos);
+  const zonasCant = zonas.length
+    ? zonas.reduce((a, z) => a + num(z.cantidad), 0)
+    : num(base.zonasCant);
 
   return {
     ...base,
@@ -45,9 +48,10 @@ export function totalesDashboardEnVivo(data = {}) {
     escaner,
     calidad,
     supervisorCount: supervisorRol,
-    supervisoresUnicos,
+    supervisoresUnicos: conteos,
     conteos,
-    total: cosechadores + escaner + calidad + supervisoresUnicos,
+    zonasCant,
+    total: cosechadores + escaner + calidad + conteos,
     almuerzos: num(base.almuerzos),
     permisos: num(base.permisos),
     faltas: num(base.faltas)

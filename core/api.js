@@ -39,10 +39,10 @@ export async function consultarConteo(data) {
 }
 
 export async function obtenerDashboard(fecha) {
-  // GET es más rápido que POST para leer resumen
   return callScriptGet({
     action: 'dashboard',
-    fecha: fecha || ''
+    fecha: fecha || '',
+    _t: String(Date.now())
   });
 }
 

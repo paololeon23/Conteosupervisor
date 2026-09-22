@@ -30,7 +30,7 @@ const ROLE_COLORS = {
 };
 
 function nSupervisores(t = {}) {
-  return Number(t.supervisoresUnicos) || 0;
+  return Number(t.conteos) || Number(t.supervisoresUnicos) || 0;
 }
 
 function totalRolesVisible(t = {}) {
@@ -157,11 +157,18 @@ function labelFromMeta(resp) {
 
 export function initData() {
   if (bound) {
-    cargar(false);
+    cargar(true, { silent: true });
     return;
   }
   bound = true;
   initSupResumen();
+  startLiveRefresh();
+  window.addEventListener('historial:update', () => {
+    const panel = document.getElementById('tab-data');
+    if (panel?.classList.contains('tab-panel--active')) {
+      cargar(true, { silent: true });
+    }
+  });
 
   $('#btn-data-hoy')?.addEventListener('click', () => {
     modoFecha = 'hoy';
@@ -191,7 +198,7 @@ export function initData() {
   });
 
   syncFiltroUI();
-  cargar(false);
+  cargar(true);
 }
 
 function syncFiltroUI() {
@@ -276,26 +283,43 @@ function infoSupervisor(raw) {
   return { dni, nombre };
 }
 
+let liveTimer = 0;
+
+function startLiveRefresh() {
+  if (liveTimer) return;
+  liveTimer = window.setInterval(() => {
+    const panel = document.getElementById('tab-data');
+    if (!panel?.classList.contains('tab-panel--active')) return;
+    if (document.visibilityState === 'hidden') return;
+    if (!isOnline()) return;
+    cargar(true, { silent: true });
+  }, 12000);
+}
+
 /**
  * @param {boolean} force true = pedir al servidor (botón refresh)
+ * @param {{ silent?: boolean }} [opts]
  */
-async function cargar(force) {
+async function cargar(force, opts = {}) {
   if (loading) return;
+  const silent = Boolean(opts.silent);
   const root = $('#data-root');
   if (!root) return;
 
   const cached = readLocalDash(modoFecha);
+  const cacheDeOtroDia = modoFecha === 'hoy'
+    && cached?.data?.fecha
+    && cached.data.fecha !== 'all'
+    && cached.data.fecha !== todayStr();
 
-  // Sin forzar: usar caché local (rápido, para analizar)
-  if (!force && cached?.data) {
-    applyData(cached.data, 'cache');
-    return;
+  if (cached?.data && !cacheDeOtroDia && (silent || !lastData)) {
+    applyData(cached.data, silent ? undefined : 'cache');
   }
 
   if (!isOnline()) {
     if (cached?.data) {
       applyData(cached.data, 'offline');
-      toast('Sin internet — mostrando última data guardada', 'info');
+      if (!silent) toast('Sin internet — mostrando última data guardada', 'info');
       return;
     }
     lastData = null;
@@ -314,8 +338,8 @@ async function cargar(force) {
 
   loading = true;
   const status = $('#data-status');
-  if (status) status.textContent = 'Actualizando…';
-  if (!cached?.data) {
+  if (status && !silent) status.textContent = 'Actualizando…';
+  if (!cached?.data && !lastData) {
     root.innerHTML = `<div class="data-loading"><span class="data-spinner"></span>Cargando dashboard…</div>`;
   }
 
@@ -325,16 +349,8 @@ async function cargar(force) {
     if (!resp?.ok) throw new Error(resp?.message || 'No se pudo cargar');
     writeLocalDash(modoFecha, resp);
     applyData(resp, labelFromMeta(resp));
-    if (force) {
-      const meta = resp.meta || {};
-      const fechas = Array.isArray(meta.fechasEncontradas) ? meta.fechasEncontradas : [];
-      if (modoFecha === 'hoy' && fechas.length > 1) {
-        toast(`Hoy = ${resp.fecha} · En Excel hay ${fechas.length} fechas`, 'info');
-      } else if (modoFecha === 'hoy' && meta.filasOmitidasPorFecha > 0) {
-        toast(`Hoy filtró ${meta.filasOmitidasPorFecha} filas de otras fechas`, 'info');
-      } else {
-        toast('Datos actualizados del servidor', 'success');
-      }
+    if (force && !silent) {
+      toast('Datos actualizados del servidor', 'success');
     }
   } catch (err) {
     if (cached?.data) {

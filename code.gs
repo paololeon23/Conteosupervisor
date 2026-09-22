@@ -213,6 +213,7 @@
       }
 
       var data = hoja.getRange(2, 1, lastRow, COLUMNAS.length).getValues();
+      var fechasTxt = hoja.getRange(2, COL.FECHA + 1, lastRow, 1).getDisplayValues();
       var personal = null;
       var zonas = [];
       var batchKey = '';
@@ -222,12 +223,12 @@
         var row = data[i];
         var tipo = String(row[COL.TIPO] || '').trim().toUpperCase();
         if (tipo !== 'PERSONAL') continue;
-        var fechaRow = normalizarFecha_(row[COL.FECHA]);
+        var fechaRow = fechaCelda_(row[COL.FECHA], fechasTxt[i][0]);
         if (fechaRow !== fecha) continue;
         if (!filaEsDni_(row, dni)) continue;
 
         personal = row;
-        batchKey = batchKey_(row);
+        batchKey = batchKey_(row, fechaRow);
         zonas = [];
       }
 
@@ -239,7 +240,7 @@
       for (var j = 0; j < data.length; j++) {
         var r = data[j];
         if (String(r[COL.TIPO] || '').trim().toUpperCase() !== 'ZONA') continue;
-        if (batchKey_(r) !== batchKey) continue;
+        if (batchKey_(r, fechaCelda_(r[COL.FECHA], fechasTxt[j][0])) !== batchKey) continue;
         var zonaNom = String(r[COL.ZONA] || '').trim().toUpperCase();
         var cant = num_(r[COL.CANTIDAD]);
         if (zonaNom && cant > 0) zonas.push({ zona: zonaNom, cantidad: cant });
@@ -278,12 +279,12 @@
       };
     }
 
-    function batchKey_(row) {
+    function batchKey_(row, fechaNorm) {
       return [
         String(row[COL.HORA] || ''),
         String(row[COL.GRUPO] || ''),
         String(row[COL.DNI] || ''),
-        normalizarFecha_(row[COL.FECHA])
+        fechaNorm || fechaCelda_(row[COL.FECHA], '')
       ].join('|');
     }
 
@@ -309,11 +310,12 @@
       var lastRow = hoja.getLastRow();
       if (lastRow < 2) return [];
       var data = hoja.getRange(2, 1, lastRow, COL.TIPO + 1).getValues();
+      var fechasTxt = hoja.getRange(2, COL.FECHA + 1, lastRow, 1).getDisplayValues();
       var indices = [];
       for (var i = 0; i < data.length; i++) {
         var tipo = String(data[i][COL.TIPO] || '').trim().toUpperCase();
         if (tipo !== 'ZONA' && tipo !== 'PERSONAL') continue;
-        if (normalizarFecha_(data[i][COL.FECHA]) !== fecha) continue;
+        if (fechaCelda_(data[i][COL.FECHA], fechasTxt[i][0]) !== fecha) continue;
         if (!filaEsDni_(data[i], dni)) continue;
         indices.push(i + 2);
       }
@@ -366,8 +368,7 @@
     }
 
     /**
-    * Resumen desde Sheet (rápido):
-    * - Cache servidor ~90s por fecha
+    * Resumen desde Sheet en vivo (sin cache):
     * - Filas PERSONAL → roles
     * - Filas ZONA → personas por zona
     * fecha vacío / "hoy" = hoy Lima; "all" = todas las fechas
@@ -376,36 +377,22 @@
       var filtroRaw = String(fechaFiltro || '').trim();
       var todas = filtroRaw.toLowerCase() === 'all' || filtroRaw === '*';
       var filtro = todas ? 'all' : resolverFechaFiltro_(filtroRaw);
-      var cacheKey = 'dash_v6_' + (todas ? 'all' : filtro);
-
-      var cache = CacheService.getScriptCache();
-      try {
-        var cached = cache.get(cacheKey);
-        if (cached) {
-          var parsed = JSON.parse(cached);
-          if (parsed && parsed.ok) {
-            parsed.fromCache = true;
-            return parsed;
-          }
-        }
-      } catch (e) { /* sin cache */ }
 
       var hoja = obtenerHoja_();
       asegurarEncabezados_(hoja);
       var lastRow = hoja.getLastRow();
       if (lastRow < 2) {
-        var vacio = armarResultado_(todas ? 'all' : filtro, vaciosTotales_(), [], [], 0, {
+        return armarResultado_(todas ? 'all' : filtro, vaciosTotales_(), [], [], 0, {
           hoyServidor: hoy_(),
           fechasEncontradas: [],
           filasLeidas: 0,
           filasOmitidasPorFecha: 0,
           hoja: hoja.getName()
         });
-        try { cache.put(cacheKey, JSON.stringify(vacio), 90); } catch (e2) {}
-        return vacio;
       }
 
       var data = hoja.getRange(2, 1, lastRow, COLUMNAS.length).getValues();
+      var fechasTxt = hoja.getRange(2, COL.FECHA + 1, lastRow, 1).getDisplayValues();
       var bySup = {};
       var byZona = {};
       var totales = vaciosTotales_();
@@ -420,7 +407,7 @@
         if (tipo !== 'PERSONAL' && tipo !== 'ZONA') continue;
 
         filasLeidas++;
-        var fecha = normalizarFecha_(row[COL.FECHA]);
+        var fecha = fechaCelda_(row[COL.FECHA], fechasTxt[i][0]);
         if (fecha) fechasMap[fecha] = true;
 
         if (!todas && fecha !== filtro) {
@@ -434,7 +421,7 @@
           if (!nombre && !dniSup) nombre = 'SIN NOMBRE';
           // Etiqueta compatible con el cliente (match por DNI o nombre)
           var label = dniSup ? (dniSup + ' · ' + (nombre || dniSup)) : nombre;
-          var key = dniSup || label;
+          var key = (dniSup || 'X') + '|' + nombre;
 
           var cos = num_(row[COL.COSECHADORES]);
           var esc = num_(row[COL.ESCANER]);
@@ -488,7 +475,7 @@
           var dniZ = limpiarDni_(row[COL.DNI]);
           var nombreZ = String(row[COL.SUPERVISOR] || '').trim().toUpperCase();
           var labelZ = dniZ ? (dniZ + ' · ' + (nombreZ || dniZ)) : nombreZ;
-          var keyZ = dniZ || labelZ;
+          var keyZ = (dniZ || 'X') + '|' + nombreZ;
           if (keyZ) {
             if (!bySup[keyZ]) {
               bySup[keyZ] = {
@@ -566,10 +553,6 @@
         soloHoyEnBase: !todas && fechasEncontradas.length === 1 && fechasEncontradas[0] === filtro
       });
 
-      try {
-        cache.put(cacheKey, JSON.stringify(result), 90);
-      } catch (e3) { /* payload grande */ }
-
       return result;
     }
 
@@ -599,7 +582,7 @@
       try {
         var cache = CacheService.getScriptCache();
         var hoy = hoy_();
-        ['dash_v6_', 'dash_v5_', 'dash_v4_', 'dash_v3_', 'dash_v2_'].forEach(function (p) {
+        ['dash_v8_', 'dash_v7_', 'dash_v6_', 'dash_v5_', 'dash_v4_', 'dash_v3_', 'dash_v2_'].forEach(function (p) {
           cache.remove(p + hoy);
           cache.remove(p + 'all');
         });
@@ -621,19 +604,21 @@
       };
     }
 
-    /** Normaliza fechas de Sheet (Date, serial, texto) a yyyy-MM-dd en TZ Lima / hoja */
-    function normalizarFecha_(v) {
-      var ssTz = TZ;
-      try {
-        ssTz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone() || TZ;
-      } catch (e) { /* ok */ }
+    /** Fecha de la celda: primero lo que se ve en el Sheet, luego el valor crudo */
+    function fechaCelda_(valor, display) {
+      var vista = normalizarFecha_(display);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(vista)) return vista;
+      return normalizarFecha_(valor);
+    }
 
+    /** Normaliza fechas de Sheet (Date, serial, texto) a yyyy-MM-dd calendario (sin correr un día por UTC−Lima) */
+    function normalizarFecha_(v) {
       if (Object.prototype.toString.call(v) === '[object Date]' && !isNaN(v.getTime())) {
-        return Utilities.formatDate(v, ssTz, 'yyyy-MM-dd');
+        return fechaDesdeDate_(v);
       }
 
       if (typeof v === 'number' && isFinite(v) && v > 20000 && v < 80000) {
-        // Serial de Google Sheets
+        // Serial de Google Sheets = días desde 1899-12-30 (calendario, no hora Lima)
         var epoch = new Date(Date.UTC(1899, 11, 30));
         var asDate = new Date(epoch.getTime() + Math.round(v) * 86400000);
         return Utilities.formatDate(asDate, 'UTC', 'yyyy-MM-dd');
@@ -645,20 +630,40 @@
       var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
       if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
 
-      var dmy = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
-      if (dmy) {
-        var dd = ('0' + dmy[1]).slice(-2);
-        var mm = ('0' + dmy[2]).slice(-2);
-        return dmy[3] + '-' + mm + '-' + dd;
+      var parts = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
+      if (parts) {
+        var a = parseInt(parts[1], 10);
+        var b = parseInt(parts[2], 10);
+        var yyyy = parts[3];
+        var day;
+        var month;
+        if (a > 12 && b <= 12) {
+          day = a;
+          month = b;
+        } else if (b > 12 && a <= 12) {
+          day = b;
+          month = a;
+        } else {
+          day = a;
+          month = b;
+        }
+        return yyyy + '-' + ('0' + month).slice(-2) + '-' + ('0' + day).slice(-2);
       }
 
-      // Último intento: parsear como Date
       var parsed = new Date(s);
       if (!isNaN(parsed.getTime())) {
-        return Utilities.formatDate(parsed, ssTz, 'yyyy-MM-dd');
+        return fechaDesdeDate_(parsed);
       }
 
       return s;
+    }
+
+    /** Date de Sheets: medianoche UTC = día del calendario; si no, día en Lima */
+    function fechaDesdeDate_(d) {
+      if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
+        return Utilities.formatDate(d, 'UTC', 'yyyy-MM-dd');
+      }
+      return Utilities.formatDate(d, TZ, 'yyyy-MM-dd');
     }
 
     function fila_(base, tipo, zona, cantidad, extra) {
