@@ -67,8 +67,8 @@
         <img src="/assets/icon-192.png" alt="" width="44" height="44">
       </div>
       <div class="install-banner__body">
-        <p class="install-banner__title">Instalar Conteo Q Berries</p>
-        <p class="install-banner__sub">Presione para descargar en su celular · funciona sin internet</p>
+        <p class="install-banner__title" id="install-banner-title">Instalar Conteo Q Berries</p>
+        <p class="install-banner__sub" id="install-banner-sub">En su celular · funciona sin internet</p>
       </div>
       <button type="button" id="btn-install-banner" class="install-banner__btn">
         Instalar
@@ -498,23 +498,35 @@
     </div>
   </div>
 
-  <!-- Ayuda instalación Android (si el navegador no muestra el diálogo) -->
+  <!-- Ayuda instalación: Android (Instalar) · iPhone (anclar al inicio) -->
   <div id="install-help-modal" class="modal zona-modal" aria-hidden="true" role="dialog" aria-label="Cómo instalar">
     <div class="zona-sheet install-help-sheet">
       <div class="zona-sheet__head">
-        <h3>Instalar en Android</h3>
+        <h3 id="install-help-title">Instalar app</h3>
         <button type="button" id="install-help-close" class="zona-sheet__close" aria-label="Cerrar">
           <span class="zona-sheet__close-x" aria-hidden="true">×</span>
         </button>
       </div>
       <div class="install-help-body">
-        <ol class="install-help-steps">
-          <li>Abra esta página en <strong>Google Chrome</strong></li>
-          <li>Toque el menú <strong>⋮</strong> (arriba a la derecha)</li>
-          <li>Elija <strong>Instalar aplicación</strong> o <strong>Agregar a pantalla de inicio</strong></li>
-          <li>Confirme con <strong>Instalar</strong></li>
-        </ol>
-        <button type="button" id="install-help-retry" class="btn btn--primary btn--save">Intentar de nuevo</button>
+        <div id="install-help-android" class="install-help-panel" hidden>
+          <ol class="install-help-steps">
+            <li>Abra esta página en <strong>Google Chrome</strong></li>
+            <li>Toque el menú <strong>⋮</strong> (arriba a la derecha)</li>
+            <li>Elija <strong>Instalar aplicación</strong> o <strong>Agregar a pantalla de inicio</strong></li>
+            <li>Confirme con <strong>Instalar</strong></li>
+          </ol>
+          <button type="button" id="install-help-retry" class="btn btn--primary btn--save">Intentar Instalar</button>
+        </div>
+        <div id="install-help-ios" class="install-help-panel" hidden>
+          <p class="install-help-lead">En iPhone no hay botón “Instalar”. Ancle la app así:</p>
+          <ol class="install-help-steps">
+            <li>Abra esta página en <strong>Safari</strong> (no Chrome)</li>
+            <li>Toque el botón <strong>Compartir</strong> (el cuadrado con flecha hacia arriba)</li>
+            <li>Baje y elija <strong>Agregar a pantalla de inicio</strong></li>
+            <li>Toque <strong>Agregar</strong> — quedará el icono como una app</li>
+          </ol>
+          <p class="install-help-note">Luego ábrala desde el inicio; funcionará sin internet.</p>
+        </div>
       </div>
     </div>
   </div>

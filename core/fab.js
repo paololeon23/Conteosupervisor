@@ -1,6 +1,6 @@
 /** Menú flotante · Conteo · Ver data · Historial · Actualizar · Instalar — siempre en celular */
 
-import { refreshApp } from './pwa.js';
+import { refreshApp, isStandalone } from './pwa.js';
 
 const MORE_SVG = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>`;
 
@@ -89,11 +89,14 @@ function runAct(act) {
 function syncInstallItem() {
   const installBtn = document.querySelector('#fab-menu [data-act="install-app"]');
   if (!installBtn) return;
-  const source = document.getElementById('btn-install-historial')
-    || document.getElementById('btn-install-banner')
-    || document.getElementById('btn-install-app');
-  const show = Boolean(source && !source.hidden && source.getAttribute('hidden') == null);
-  installBtn.hidden = !show;
+  // Si aún no está instalada (no standalone), mostrar Instalar / Anclar
+  installBtn.hidden = isStandalone();
+  const label = installBtn.querySelector('span');
+  if (label) {
+    const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    label.textContent = ios ? 'Anclar al inicio' : 'Instalar app';
+  }
 }
 
 export function destroyFab() {

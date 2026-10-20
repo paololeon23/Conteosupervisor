@@ -57,6 +57,17 @@ export function isAndroid() {
   return /Android/i.test(navigator.userAgent);
 }
 
+export function isIos() {
+  const ua = navigator.userAgent || '';
+  const iPadOs = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  return /iPhone|iPad|iPod/i.test(ua) || iPadOs;
+}
+
+export function isMobilePhone() {
+  return isAndroid() || isIos()
+    || window.matchMedia('(max-width: 1023px) and (pointer: coarse)').matches;
+}
+
 function isInstallDismissed() {
   try {
     return localStorage.getItem(INSTALL_DISMISS_KEY) === '1';
@@ -78,12 +89,44 @@ function hideInstallUI() {
   });
 }
 
+function applyInstallCopy() {
+  const title = $('#install-banner-title');
+  const sub = $('#install-banner-sub');
+  const btn = $('#btn-install-banner');
+  const foot = $('#btn-install-app');
+  const hist = $('#btn-install-historial');
+
+  if (isIos()) {
+    if (title) title.textContent = 'Anclar Conteo al inicio';
+    if (sub) sub.textContent = 'En iPhone: Compartir → Agregar a pantalla de inicio';
+    if (btn) btn.textContent = 'Cómo anclar';
+    if (foot) foot.textContent = 'Anclar al inicio';
+    if (hist) {
+      const svg = hist.querySelector('svg');
+      hist.textContent = '';
+      if (svg) hist.appendChild(svg);
+      hist.append(' Anclar al inicio');
+    }
+  } else {
+    if (title) title.textContent = 'Instalar Conteo Q Berries';
+    if (sub) sub.textContent = 'Descargar en su celular · funciona sin internet';
+    if (btn) btn.textContent = 'Instalar';
+    if (foot) foot.textContent = 'Instalar app';
+    if (hist) {
+      const svg = hist.querySelector('svg');
+      hist.textContent = '';
+      if (svg) hist.appendChild(svg);
+      hist.append(' Descargar e instalar');
+    }
+  }
+}
+
 function showInstallUI() {
   if (isStandalone() || isInstallDismissed()) return;
+  if (!isMobilePhone()) return;
 
-  if (isAndroid()) {
-    $('#install-banner')?.removeAttribute('hidden');
-  }
+  applyInstallCopy();
+  $('#install-banner')?.removeAttribute('hidden');
 
   ['#btn-install-app', '#btn-install-banner', '#btn-install-historial'].forEach((sel) => {
     const el = $(sel);
@@ -92,6 +135,23 @@ function showInstallUI() {
 }
 
 function openInstallHelp() {
+  const title = $('#install-help-title');
+  const android = $('#install-help-android');
+  const ios = $('#install-help-ios');
+  const retry = $('#install-help-retry');
+
+  if (isIos()) {
+    if (title) title.textContent = 'Anclar en iPhone';
+    if (android) android.hidden = true;
+    if (ios) ios.hidden = false;
+    if (retry) retry.hidden = true;
+  } else {
+    if (title) title.textContent = 'Instalar en Android';
+    if (android) android.hidden = false;
+    if (ios) ios.hidden = true;
+    if (retry) retry.hidden = false;
+  }
+
   openModalElement($('#install-help-modal'));
 }
 
@@ -100,6 +160,7 @@ function closeInstallHelp() {
 }
 
 async function triggerInstall() {
+  // Android Chrome: diálogo nativo Instalar
   if (deferredInstallPrompt) {
     try {
       await deferredInstallPrompt.prompt();
@@ -109,20 +170,15 @@ async function triggerInstall() {
         toast('Instalando app en su celular…', 'success');
       }
     } catch {
-      toast('No se pudo abrir la instalación', 'warn');
-      if (isAndroid()) openInstallHelp();
+      openInstallHelp();
     } finally {
       deferredInstallPrompt = null;
     }
     return;
   }
 
-  if (isAndroid()) {
-    openInstallHelp();
-    return;
-  }
-
-  toast('Use Chrome en Android para instalar la app', 'info');
+  // iPhone / Android sin prompt: explicar pasos
+  openInstallHelp();
 }
 
 function bindInstallButtons(selectors) {
@@ -135,7 +191,10 @@ function bindInstallButtons(selectors) {
 }
 
 export function initInstallPrompt() {
-  if (isStandalone()) return;
+  if (isStandalone()) {
+    hideInstallUI();
+    return;
+  }
 
   bindInstallButtons([
     '#btn-install-app',
@@ -165,12 +224,12 @@ export function initInstallPrompt() {
     toast('App instalada — ábrala desde el icono del inicio', 'success');
   });
 
-  // Android: mostrar banner aunque el evento tarde unos segundos
-  if (isAndroid() && !isInstallDismissed()) {
+  // Celular sin instalar: mostrar banner (Android Instalar / iPhone anclar)
+  if (isMobilePhone() && !isInstallDismissed()) {
     showInstallUI();
     window.setTimeout(() => {
       if (!isStandalone() && !isInstallDismissed()) showInstallUI();
-    }, 2500);
+    }, 1800);
   }
 }
 
