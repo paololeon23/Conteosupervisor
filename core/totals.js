@@ -37,7 +37,8 @@ export function totalesDashboardEnVivo(data = {}) {
   const escaner = fromList ? lista.reduce((a, s) => a + num(s.escaner), 0) : num(base.escaner);
   const calidad = fromList ? lista.reduce((a, s) => a + num(s.calidad), 0) : num(base.calidad);
   const supervisorRol = fromList ? lista.reduce((a, s) => a + num(s.supervisorCount), 0) : num(base.supervisorCount);
-  const conteos = fromList ? lista.reduce((a, s) => a + Math.max(num(s.conteos), 1), 0) : num(base.conteos);
+  const conteos = fromList ? lista.reduce((a, s) => a + num(s.conteos), 0) : num(base.conteos);
+  const supervisoresUnicos = fromList ? lista.length : num(base.supervisoresUnicos);
   const zonasCant = zonas.length
     ? zonas.reduce((a, z) => a + num(z.cantidad), 0)
     : num(base.zonasCant);
@@ -48,10 +49,10 @@ export function totalesDashboardEnVivo(data = {}) {
     escaner,
     calidad,
     supervisorCount: supervisorRol,
-    supervisoresUnicos: conteos,
+    supervisoresUnicos,
     conteos,
     zonasCant,
-    total: cosechadores + escaner + calidad + conteos,
+    total: cosechadores + escaner + calidad + supervisoresUnicos,
     almuerzos: num(base.almuerzos),
     permisos: num(base.permisos),
     faltas: num(base.faltas)
@@ -71,7 +72,7 @@ export function zonasExcedenTotal(totalPersonal, totalZonas) {
 }
 
 export function maxPersonasEnZona(totalPersonal, totalOtrasZonas) {
-  if (totalPersonal <= 0) return Infinity;
+  if (totalPersonal <= 0) return 0;
   return Math.max(0, totalPersonal - totalOtrasZonas);
 }
 

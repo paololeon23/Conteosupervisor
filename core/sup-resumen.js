@@ -212,7 +212,7 @@ async function renderSupervisorPng(sup, data) {
 
   // chip fecha
   roundRect(ctx, 64, 140, 280, 40, 12);
-  ctx.fillStyle = 'rgba(82,173,75,0.12)';
+  ctx.fillStyle = 'rgba(31,107,69,0.12)';
   ctx.fill();
   ctx.fillStyle = '#3D8A37';
   ctx.font = '700 18px system-ui, -apple-system, sans-serif';
@@ -230,7 +230,7 @@ async function renderSupervisorPng(sup, data) {
 
   // KPIs
   const kpis = [
-    { label: 'COSECHADORES', value: sup.cosechadores || 0, color: '#52AD4B', bg: 'rgba(82,173,75,0.12)' },
+    { label: 'COSECHADORES', value: sup.cosechadores || 0, color: '#1f6b45', bg: 'rgba(31,107,69,0.12)' },
     { label: 'ESCÁNER', value: sup.escaner || 0, color: '#1d4ed8', bg: 'rgba(59,130,246,0.12)' },
     { label: 'CALIDAD', value: sup.calidad || 0, color: '#b54708', bg: 'rgba(247,148,30,0.14)' },
     { label: 'SUPERVISOR', value: sup.supervisorCount || 0, color: '#D61F26', bg: 'rgba(214,31,38,0.1)' }

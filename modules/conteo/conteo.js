@@ -2,8 +2,6 @@ import { ROLES } from '../../core/api-config.js';
 import { saveBorrador, loadBorrador, clearBorrador } from '../../core/draft.js';
 import { persistConteo, conteoYaRegistrado } from '../../core/save-conteo.js';
 import { openZonaSelect, initZonaSelect, SVG_X } from '../../core/zona-select.js';
-import { openLoteSelect, initLoteSelect, aplicarLote, resetLote } from '../../core/lote-select.js';
-import { openGrupoSelect, initGrupoSelect, aplicarGrupo, resetGrupo } from '../../core/grupo-select.js';
 import {
   initSupervisorSelect,
   aplicarSupervisor,
@@ -13,7 +11,7 @@ import {
   desbloquearDniInput
 } from '../../core/supervisor-select.js';
 import { preloadLicapa } from '../../core/licapa-data.js';
-import { limpiarDni, extraerDni, buscarPorDni } from '../../core/supervisores-catalog.js';
+import { limpiarDni, extraerDni, buscarPorDni, loadSupervisoresCosecha } from '../../core/supervisores-catalog.js';
 import { initDatePicker, setFecha, getFecha, syncFechaHoy } from '../../core/date-picker.js';
 import { initComprobante, openComprobantePreview } from '../../core/comprobante.js';
 import { addCustomZona, validarZona } from '../../core/zonas-catalog.js';
@@ -70,14 +68,28 @@ function pulseTotal(el) {
   el.classList.add('total-box__val--pulse');
 }
 
+function clampZonasAlPersonal(tp) {
+  let used = 0;
+  zonasAgregadas.forEach((z, i) => {
+    const max = maxPersonasEnZona(tp, used);
+    const actual = Math.max(0, Number(z.cantidad) || 0);
+    const next = Math.min(actual, max);
+    z.cantidad = next;
+    used += next;
+    const inp = document.querySelector(`.zona-row__qty[data-idx="${i}"]`);
+    if (inp) {
+      inp.max = String(max);
+      inp.value = next > 0 ? String(next) : '';
+    }
+  });
+}
+
 function updateTotals() {
-  const roles = rolesPayload();
-  const tp = calcTotalPersonalFromRoles(roles);
+  const tp = calcTotalRoles();
+  clampZonasAlPersonal(tp);
   const tz = calcTotalZonas();
   const elPersonal = document.getElementById('total-personal');
   const elZonas = document.getElementById('total-zonas');
-  const formPersonal = document.getElementById('total-personal-formula');
-  const formZonas = document.getElementById('total-zonas-formula');
   const boxPersonal = document.getElementById('total-personal-box');
   const boxZonas = document.getElementById('total-zonas-box');
 
@@ -85,24 +97,9 @@ function updateTotals() {
     elPersonal.textContent = String(tp);
     pulseTotal(elPersonal);
   }
-  if (formPersonal) {
-    const show = tp > 0;
-    formPersonal.hidden = !show;
-    formPersonal.textContent = show
-      ? `${roles.cosechadores} + ${roles.escaner} + ${roles.calidad} + ${roles.supervisorCount}`
-      : '';
-  }
   if (elZonas) {
     elZonas.textContent = tp > 0 ? `${tz}/${tp}` : String(tz);
     pulseTotal(elZonas);
-  }
-  if (formZonas) {
-    const partes = zonasAgregadas
-      .map((z) => Number(z.cantidad) || 0)
-      .filter((n) => n > 0);
-    const show = partes.length > 0;
-    formZonas.hidden = !show;
-    formZonas.textContent = show ? partes.join(' + ') : '';
   }
 
   const match = totalsCoinciden(tp, tz);
@@ -111,9 +108,6 @@ function updateTotals() {
   boxZonas?.classList.toggle('total-box--match', match);
   boxZonas?.classList.toggle('total-box--over', over);
 
-  syncResumenLimits(tp);
-  RESUMEN_FIELDS.forEach(({ id, label }) => clampResumenInput(id, label));
-
   saveDraftDebounced();
 }
 
@@ -121,56 +115,26 @@ function calcTotalZonas() {
   return calcTotalZonasFromList(zonasAgregadas);
 }
 
-const RESUMEN_FIELDS = [
-  { id: 'almuerzos', label: 'Almuerzos' },
-  { id: 'permisos', label: 'Permisos' },
-  { id: 'faltas', label: 'Faltas' }
-];
+const LICAPAS = ['LICAPA I', 'LICAPA II', 'LICAPA III', 'LICAPA IV'];
 
-function syncResumenLimits(totalPersonal) {
-  RESUMEN_FIELDS.forEach(({ id }) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    if (totalPersonal > 0) {
-      el.max = totalPersonal;
-      el.setAttribute('aria-valuemax', String(totalPersonal));
-    } else {
-      el.removeAttribute('max');
-      el.removeAttribute('aria-valuemax');
-    }
-  });
+function aplicarLicapa(valor) {
+  const v = String(valor || '').trim().toUpperCase();
+  const ok = LICAPAS.includes(v) ? v : '';
+  const sel = $('#licapa');
+  if (sel) sel.value = ok;
 }
 
-function clampResumenInput(id, label) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const tp = calcTotalRoles();
-  if (tp <= 0) return;
-  const val = readNum(id);
-  if (val > tp) {
-    el.value = displayNum(tp);
-    toast(`${label}: máximo ${tp} personas`, 'warn');
-  }
-}
+function syncResumenLimits() {}
 
 function persistirBorrador() {
   if (draftPaused) return;
   saveBorrador({
-    grupo: $('#grupo')?.value || '',
-    grupoLabel: $('#grupo-label')?.value || '',
-    lote: $('#lote')?.value || '',
-    codLote: $('#codLote')?.value || '',
-    variedad: $('#variedad')?.value || '',
+    licapa: $('#licapa')?.value || '',
     supervisor: $('#supervisor')?.value || '',
     codSupervisor: $('#codSupervisor')?.value || '',
     fecha: $('#fecha')?.value || '',
-    modulo: $('#modulo')?.value || '',
-    turno: $('#turno')?.value || '',
     roles: ROLES.reduce((o, r) => ({ ...o, [r.key]: num(`role-${r.key}`) }), {}),
     zonas: zonasAgregadas,
-    almuerzos: num('almuerzos'),
-    permisos: num('permisos'),
-    faltas: num('faltas')
   });
 }
 
@@ -178,18 +142,7 @@ function restaurarBorrador() {
   const b = loadBorrador();
   if (!b) return;
 
-  if (b.grupoLabel) aplicarGrupo(b.grupoLabel);
-  else if (b.grupo && $('#grupo')) $('#grupo').value = b.grupo;
-
-  if (b.lote && b.modulo && b.turno) {
-    aplicarLote({
-      lote: b.lote,
-      codLote: b.codLote || '',
-      variedad: b.variedad || '',
-      modulo: `M${b.modulo}`,
-      turno: b.turno
-    });
-  }
+  if (b.licapa) aplicarLicapa(b.licapa);
 
   if (b.codSupervisor) aplicarSupervisor(b.codSupervisor);
   else if (b.supervisor) {
@@ -208,10 +161,6 @@ function restaurarBorrador() {
 
   if (Array.isArray(b.zonas)) zonasAgregadas = b.zonas.map(z => ({ ...z }));
 
-  if ($('#almuerzos') && b.almuerzos != null) $('#almuerzos').value = displayNum(b.almuerzos);
-  if ($('#permisos') && b.permisos != null) $('#permisos').value = displayNum(b.permisos);
-  if ($('#faltas') && b.faltas != null) $('#faltas').value = displayNum(b.faltas);
-
   renderZonasList();
   updateTotals();
 }
@@ -226,19 +175,22 @@ function renderZonasList() {
     return;
   }
 
-  c.innerHTML = zonasAgregadas.map((z, i) => `
+  const tpInit = calcTotalRoles();
+  c.innerHTML = zonasAgregadas.map((z, i) => {
+    const otras = zonasAgregadas.reduce((s, zona, j) => (j === i ? s : s + (zona.cantidad || 0)), 0);
+    const max = maxPersonasEnZona(tpInit, otras);
+    return `
     <div class="zona-row" data-idx="${i}">
       <div class="zona-row__info">
         <span class="zona-row__name">${z.zona}</span>
-        <span class="zona-row__area">PRODUCCION - COSECHA</span>
       </div>
-      <input type="number" class="num-input zona-row__qty" min="0" inputmode="numeric"
-        value="${z.cantidad > 0 ? z.cantidad : ''}" placeholder="0" data-idx="${i}" aria-label="Personas en ${z.zona}" title="Personas">
+      <input type="number" class="num-input zona-row__qty" min="0" max="${max}" inputmode="numeric"
+        value="${z.cantidad > 0 ? z.cantidad : ''}" placeholder="0" data-idx="${i}" aria-label="Personas en ${z.zona}">
       <button type="button" class="zona-row__del" data-idx="${i}" aria-label="Quitar">
         <span class="zona-row__del-icon">${SVG_X}</span>
       </button>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 
   c.querySelectorAll('.zona-row__qty').forEach(inp => {
     inp.addEventListener('input', (e) => {
@@ -247,9 +199,12 @@ function renderZonasList() {
       const otras = zonasAgregadas.reduce((s, z, i) => (i === idx ? s : s + (z.cantidad || 0)), 0);
       let val = Math.max(0, parseInt(e.target.value, 10) || 0);
       const max = maxPersonasEnZona(tp, otras);
-      if (tp > 0 && val > max) {
+      e.target.max = String(max);
+      if (val > max) {
         val = max;
-        toast(`Máximo ${tp} personas en total`, 'warn');
+        toast(tp > 0
+          ? `Máximo ${max} aquí · total ${tp}`
+          : 'Primero ingrese el personal', 'warn');
       }
       zonasAgregadas[idx].cantidad = val;
       e.target.value = val > 0 ? String(val) : '';
@@ -330,24 +285,26 @@ function getPayload(extra = {}) {
   const totalPersonal = calcTotalPersonalFromRoles(roles);
   const totalZonas = calcTotalZonasFromList(distribucionZonas);
 
+  const licapa = $('#licapa')?.value?.trim() || '';
   return {
-    grupoCosecha: $('#grupo')?.value?.trim() || '',
-    grupoLabel: $('#grupo-label')?.value?.trim() || '',
-    lote: $('#lote')?.value?.trim() || '',
-    codLote: $('#codLote')?.value?.trim() || '',
-    variedad: $('#variedad')?.value?.trim() || '',
+    licapa,
+    grupoCosecha: licapa,
+    grupoLabel: licapa,
+    lote: '',
+    codLote: '',
+    variedad: '',
     supervisor: $('#supervisor')?.value?.trim() || '',
     codSupervisor: $('#codSupervisor')?.value?.trim() || '',
     fecha: $('#fecha')?.value || todayStr(),
-    modulo: $('#modulo')?.value?.trim() || '',
-    turno: $('#turno')?.value?.trim() || '',
+    modulo: '',
+    turno: '',
     ...roles,
     totalPersonal,
     distribucionZonas,
     totalZonas,
-    almuerzos: num('almuerzos'),
-    permisos: num('permisos'),
-    faltas: num('faltas'),
+    almuerzos: 0,
+    permisos: 0,
+    faltas: 0,
     editar: editMode || isModoEditar(),
     ...extra
   };
@@ -364,11 +321,8 @@ export async function initConteo() {
   bindLiveTotals();
   updateTotals();
 
-  await Promise.all([
-    preloadLicapa(),
-    initLoteSelect(),
-    initGrupoSelect()
-  ]);
+  await preloadLicapa();
+  await loadSupervisoresCosecha();
   initSupervisorSelect(onSupervisorChange);
 
   restaurarBorrador();
@@ -435,23 +389,7 @@ export function cargarConteoParaEditar(item) {
 function rellenarFormularioDesde(data, { toastMsg = '' } = {}) {
   draftPaused = true;
 
-  if (data.grupoCosecha || data.grupoLabel) {
-    const n = String(data.grupoCosecha || '').replace(/\D/g, '');
-    const label = data.grupoLabel
-      || (n ? `Grupo Cosecha - ${n.padStart(2, '0')}` : String(data.grupoCosecha || ''));
-    if (label) aplicarGrupo(label);
-  }
-
-  if (data.lote) {
-    const mod = data.modulo ? `M${String(data.modulo).replace(/\D/g, '')}` : 'M';
-    aplicarLote({
-      lote: data.lote,
-      codLote: data.codLote || '',
-      variedad: data.variedad || '',
-      modulo: mod,
-      turno: data.turno || ''
-    });
-  }
+  aplicarLicapa(data.licapa || data.grupoLabel || data.grupoCosecha);
 
   const roleMap = {
     cosechadores: data.cosechadores,
@@ -471,10 +409,6 @@ function rellenarFormularioDesde(data, { toastMsg = '' } = {}) {
     }));
   }
 
-  if ($('#almuerzos') && data.almuerzos != null) $('#almuerzos').value = displayNum(data.almuerzos);
-  if ($('#permisos') && data.permisos != null) $('#permisos').value = displayNum(data.permisos);
-  if ($('#faltas') && data.faltas != null) $('#faltas').value = displayNum(data.faltas);
-
   // Fecha principal = siempre hoy Lima (nunca se “pega” a un día anterior)
   setFecha(todayStr(), { silent: true });
 
@@ -492,10 +426,6 @@ function bindLiveTotals() {
   const onNumChange = (e) => {
     const t = e.target;
     if (!t?.matches?.('.role-input, .num-input, .zona-row__qty')) return;
-    if (t.matches('.resumen-tile__input')) {
-      const field = RESUMEN_FIELDS.find(f => f.id === t.id);
-      if (field) clampResumenInput(field.id, field.label);
-    }
     updateTotals();
   };
 
@@ -523,11 +453,9 @@ function bindEvents() {
   form?.addEventListener('change', (e) => {
     if (e.target.matches('.num-input')) updateTotals();
   });
-  $('#btn-pick-grupo')?.addEventListener('click', () => {
-    openGrupoSelect((label) => { aplicarGrupo(label); saveDraftDebounced(); });
-  });
-  $('#btn-pick-lote')?.addEventListener('click', () => {
-    openLoteSelect((item) => { aplicarLote(item); saveDraftDebounced(); });
+  $('#licapa')?.addEventListener('change', () => {
+    aplicarLicapa($('#licapa')?.value);
+    saveDraftDebounced();
   });
   $('#btn-add-zona')?.addEventListener('click', () => {
     openZonaSelect(agregarZona, zonasAgregadas.map(z => z.zona));
@@ -557,9 +485,7 @@ function validarPayload(payload) {
     return false;
   }
   if (!payload.supervisor) { toast('Identifíquese con su DNI o registre al supervisor', 'error'); return false; }
-  if (!payload.grupoCosecha) { toast('Seleccione el grupo', 'error'); return false; }
-  if (!payload.lote) { toast('Seleccione el lote', 'error'); return false; }
-  if (!payload.modulo || !payload.turno) { toast('Seleccione lote para módulo/turno', 'error'); return false; }
+  if (!payload.licapa) { toast('Seleccione la Licapa', 'error'); return false; }
   if (payload.totalPersonal === 0) { toast('Ingrese personal', 'error'); return false; }
   if (!payload.distribucionZonas.length) { toast('Agregue al menos una zona', 'error'); return false; }
   if (!payload.distribucionZonas.some(z => z.cantidad > 0)) {
@@ -573,12 +499,6 @@ function validarPayload(payload) {
       toast(`Complete el reparto: ${payload.totalZonas} de ${payload.totalPersonal} personas`, 'warn');
     }
     return false;
-  }
-  for (const { id, label } of RESUMEN_FIELDS) {
-    if (payload[id] > payload.totalPersonal) {
-      toast(`${label}: no puede ser mayor a ${payload.totalPersonal}`, 'warn');
-      return false;
-    }
   }
   if (!payload.editar && conteoYaRegistrado(payload)) {
     toast('Este DNI ya tiene conteo hoy — se cargará para editar', 'warn');
@@ -605,10 +525,9 @@ function resetForm() {
   draftPaused = true;
   editMode = false;
 
-  resetGrupo();
+  aplicarLicapa('');
   desbloquearDniInput();
   resetSupervisor();
-  resetLote();
 
   document.querySelectorAll('#roles-grid .num-input, .resumen-grid .num-input').forEach((el) => {
     el.value = '';

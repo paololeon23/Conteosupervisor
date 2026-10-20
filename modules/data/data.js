@@ -8,7 +8,8 @@ import {
   validarSupervisores,
   nombreVisible,
   extraerDni,
-  matchSupervisorFijo
+  matchSupervisorFijo,
+  loadSupervisoresCosecha
 } from '../../core/supervisores-catalog.js';
 import { descargarExcelSeccion } from '../../core/export-excel.js';
 import { totalesDashboardEnVivo } from '../../core/totals.js';
@@ -17,28 +18,30 @@ let bound = false;
 let loading = false;
 /** @type {'hoy'|'all'} */
 let modoFecha = 'hoy';
+/** @type {''|'LICAPA I'|'LICAPA II'|'LICAPA III'|'LICAPA IV'} */
+let modoLicapa = '';
 /** @type {object|null} */
 let lastData = null;
 /** @type {string[]} */
 let lastFaltan = [];
 
 const ROLE_COLORS = {
-  cosechadores: '#52AD4B',
+  cosechadores: '#1f6b45',
   escaner: '#3B82F6',
   calidad: '#F7941E',
   supervisorCount: '#D61F26'
 };
 
 function nSupervisores(t = {}) {
-  return Number(t.conteos) || Number(t.supervisoresUnicos) || 0;
+  return Number(t.supervisoresUnicos) || 0;
 }
 
 function totalRolesVisible(t = {}) {
   return Number(t.total) || 0;
 }
 
-function dashStorageKey(modo) {
-  return `${STORAGE_KEYS.DASHBOARD}_v2_${modo}`;
+function dashStorageKey(modo, licapa = modoLicapa) {
+  return `${STORAGE_KEYS.DASHBOARD}_v4_${modo}_${licapa || 'todas'}`;
 }
 
 function readLocalDash(modo) {
@@ -51,12 +54,28 @@ function readLocalDash(modo) {
   return null;
 }
 
+/** Deja solo el cache de esta consulta; borra los demás (Licapa/fechas viejas). */
+function pruneDashCaches(keepKey) {
+  try {
+    const prefix = `${STORAGE_KEYS.DASHBOARD}_`;
+    const toRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix) && k !== keepKey) toRemove.push(k);
+    }
+    toRemove.forEach((k) => localStorage.removeItem(k));
+  } catch { /* ok */ }
+}
+
 function writeLocalDash(modo, data) {
   try {
-    localStorage.setItem(dashStorageKey(modo), JSON.stringify({
+    const key = dashStorageKey(modo);
+    localStorage.setItem(key, JSON.stringify({
       savedAt: Date.now(),
+      licapa: modoLicapa || '',
       data
     }));
+    pruneDashCaches(key);
   } catch { /* quota */ }
 }
 
@@ -70,7 +89,10 @@ function applyData(resp, statusLabel) {
     const fechaTxt = resp.fecha === 'all'
       ? 'Todas las fechas'
       : (formatFechaLima(resp.fecha) || resp.fecha);
-    status.textContent = statusLabel ? `${fechaTxt} · ${statusLabel}` : fechaTxt;
+    const licapaTxt = resp.meta?.licapa || modoLicapa || 'Todas';
+    status.textContent = statusLabel
+      ? `${fechaTxt} · ${licapaTxt} · ${statusLabel}`
+      : `${fechaTxt} · ${licapaTxt}`;
   }
 }
 
@@ -161,6 +183,7 @@ export function initData() {
     return;
   }
   bound = true;
+  loadSupervisoresCosecha();
   initSupResumen();
   startLiveRefresh();
   window.addEventListener('historial:update', () => {
@@ -181,6 +204,12 @@ export function initData() {
     syncFiltroUI();
     cargar(true);
   });
+  $('#data-licapa')?.addEventListener('change', (e) => {
+    modoLicapa = String(e.target.value || '');
+    syncLicapaLayout();
+    cargar(true);
+  });
+  syncLicapaLayout();
   // Solo el botón refresh pide al servidor
   $('#btn-data-refresh')?.addEventListener('click', () => cargar(true));
   $('#btn-data-faltan')?.addEventListener('click', openFaltanDetalle);
@@ -199,11 +228,26 @@ export function initData() {
 
   syncFiltroUI();
   cargar(true);
+
+  let deskWas = isDeskLayout();
+  window.addEventListener('resize', () => {
+    const now = isDeskLayout();
+    if (now === deskWas || !lastData) return;
+    deskWas = now;
+    render(lastData);
+    bindChartClicks();
+  });
 }
 
 function syncFiltroUI() {
   $('#btn-data-hoy')?.classList.toggle('is-active', modoFecha === 'hoy');
   $('#btn-data-all')?.classList.toggle('is-active', modoFecha === 'all');
+}
+
+function syncLicapaLayout() {
+  const on = Boolean(modoLicapa);
+  document.body.classList.toggle('data-licapa-on', on);
+  document.querySelector('#tab-data .data-panel')?.classList.toggle('is-licapa', on);
 }
 
 function closeDetail() {
@@ -306,18 +350,22 @@ async function cargar(force, opts = {}) {
   const root = $('#data-root');
   if (!root) return;
 
+  // Cache solo de ESTA fecha + Licapa (si no coincide, no se usa)
   const cached = readLocalDash(modoFecha);
+  const cacheLicapaOk = (cached?.licapa || '') === (modoLicapa || '');
   const cacheDeOtroDia = modoFecha === 'hoy'
     && cached?.data?.fecha
     && cached.data.fecha !== 'all'
     && cached.data.fecha !== todayStr();
+  const cacheUsable = Boolean(cached?.data && cacheLicapaOk && !cacheDeOtroDia);
 
-  if (cached?.data && !cacheDeOtroDia && (silent || !lastData)) {
+  // Offline o paint rápido: cache de esta Licapa. Con force (cambio Licapa) → GET fresco.
+  if (cacheUsable && !force && (silent || !lastData)) {
     applyData(cached.data, silent ? undefined : 'cache');
   }
 
   if (!isOnline()) {
-    if (cached?.data) {
+    if (cacheUsable) {
       applyData(cached.data, 'offline');
       if (!silent) toast('Sin internet — mostrando última data guardada', 'info');
       return;
@@ -339,21 +387,27 @@ async function cargar(force, opts = {}) {
   loading = true;
   const status = $('#data-status');
   if (status && !silent) status.textContent = 'Actualizando…';
-  if (!cached?.data && !lastData) {
-    root.innerHTML = `<div class="data-loading"><span class="data-spinner"></span>Cargando dashboard…</div>`;
+  // Al cambiar Licapa / forzar: no mostrar data de otra Licapa
+  if (force || !cacheUsable) {
+    if (!silent) {
+      root.innerHTML = `<div class="data-loading"><span class="data-spinner"></span>Cargando…</div>`;
+    }
+  } else if (!lastData && cacheUsable) {
+    applyData(cached.data, silent ? undefined : 'cache');
   }
 
   try {
     const fecha = modoFecha === 'all' ? 'all' : 'hoy';
-    const resp = await obtenerDashboard(fecha);
+    const resp = await obtenerDashboard(fecha, modoLicapa);
     if (!resp?.ok) throw new Error(resp?.message || 'No se pudo cargar');
+    // Guarda este resultado y borra caches viejos (otras Licapa / fechas)
     writeLocalDash(modoFecha, resp);
     applyData(resp, labelFromMeta(resp));
     if (force && !silent) {
       toast('Datos actualizados del servidor', 'success');
     }
   } catch (err) {
-    if (cached?.data) {
+    if (cacheUsable) {
       applyData(cached.data, 'cache');
       toast('No se pudo actualizar — mostrando cache', 'warn');
     } else {
@@ -375,21 +429,13 @@ async function cargar(force, opts = {}) {
   }
 }
 
-function render(data) {
-  const root = $('#data-root');
-  if (!root) return;
+function isDeskLayout() {
+  return window.matchMedia('(min-width: 1024px)').matches;
+}
 
-  const t = totalesDashboardEnVivo(data);
-  const supervisores = Array.isArray(data.supervisores) ? data.supervisores : [];
-  const zonas = Array.isArray(data.zonas) ? data.zonas : [];
-  const topSup = supervisores.slice(0, 3);
-  const topZonas = zonas.slice(0, 3);
-  const maxZona = Math.max(1, ...topZonas.map(z => z.cantidad || 0));
-  const rolesTotal = totalRolesVisible(t);
-
-  root.innerHTML = `
-    <p class="data-hint-tap">4 gráficos compactos · toque para detalle</p>
-
+function chartsHtml(t, topSup, topZonas, maxZona, rolesTotal, opts = {}) {
+  const desk = Boolean(opts.desk);
+  return `
     <div class="data-charts-grid">
       <section class="data-card data-card--tap data-card--compact" data-open="roles">
         <div class="data-card__head">
@@ -444,6 +490,7 @@ function render(data) {
         ` : `<p class="data-empty__hint">Sin datos</p>`}
       </section>
 
+      ${desk ? '' : `
       <section class="data-card data-card--tap data-card--compact" data-open="totales">
         <div class="data-card__head">
           <h3 class="data-card__title">Resumen</h3>
@@ -452,10 +499,72 @@ function render(data) {
         <div class="data-kpi-trio">
           <div><span>Personal</span><strong>${rolesTotal}</strong></div>
           <div><span>Conteos</span><strong>${t.conteos || 0}</strong></div>
-          <div><span>Almuerzos</span><strong>${t.almuerzos || 0}</strong></div>
+          <div><span>Supervisores</span><strong>${t.supervisoresUnicos || 0}</strong></div>
         </div>
       </section>
+      `}
     </div>
+  `;
+}
+
+function render(data) {
+  const root = $('#data-root');
+  const kpisHost = document.getElementById('data-kpis');
+  if (!root) return;
+
+  const desk = isDeskLayout();
+  const t = totalesDashboardEnVivo(data);
+  const supervisores = Array.isArray(data.supervisores) ? data.supervisores : [];
+  const zonas = Array.isArray(data.zonas) ? data.zonas : [];
+  const topSup = supervisores.slice(0, 3);
+  const topZonas = zonas.slice(0, 3);
+  const maxZona = Math.max(1, ...topZonas.map(z => z.cantidad || 0));
+  const rolesTotal = totalRolesVisible(t);
+
+  const licapaRaw = data.meta?.licapa || modoLicapa || 'Todas';
+  const licapaTxt = esc(licapaRaw);
+  const nSup = supervisores.length;
+
+  if (desk) {
+    if (kpisHost) {
+      kpisHost.innerHTML = `
+        <div class="data-dash-kpis">
+          <article class="data-dash-kpi">
+            <span>Personal</span>
+            <strong>${rolesTotal}</strong>
+            <small>Total en roles · ${licapaTxt}</small>
+          </article>
+          <article class="data-dash-kpi">
+            <span>Conteos</span>
+            <strong>${t.conteos || 0}</strong>
+            <small>Registros del período</small>
+          </article>
+          <article class="data-dash-kpi">
+            <span>Supervisores</span>
+            <strong>${nSup}</strong>
+            <small>Con reporte</small>
+          </article>
+        </div>
+      `;
+    }
+
+    root.innerHTML = `
+      <div class="data-dash-section">
+        <div class="data-dash-section__head">
+          <h3>Gráficos del día</h3>
+          <p class="data-hint-tap">Toque una tarjeta para ver el detalle</p>
+        </div>
+        ${chartsHtml(t, topSup, topZonas, maxZona, rolesTotal, { desk: true })}
+      </div>
+    `;
+    return;
+  }
+
+  // Celular: layout compacto original (sin dashboard de escritorio)
+  if (kpisHost) kpisHost.innerHTML = '';
+  root.innerHTML = `
+    <p class="data-hint-tap">4 gráficos compactos · toque para detalle</p>
+    ${chartsHtml(t, topSup, topZonas, maxZona, rolesTotal, { desk: false })}
   `;
 }
 
@@ -696,7 +805,6 @@ function showModalFor(kind) {
       <div class="dd-stat dd-stat--grand"><span>Total junto</span><strong>${rolesTotal}</strong></div>
     </div>
     <div class="dd-mini">
-      <span>Almuerzos ${t.almuerzos || 0}</span>
       <span>Permisos ${t.permisos || 0}</span>
       <span>Faltas ${t.faltas || 0}</span>
       <span>Conteos ${t.conteos || 0}</span>

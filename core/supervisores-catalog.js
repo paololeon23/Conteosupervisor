@@ -65,6 +65,40 @@ export const SUPERVISORES_FIJOS = SUPERVISORES.map((s) => s.nombre);
 const CUSTOM_KEY = 'qb_supervisores_custom_v1';
 const NOMBRE_VALID_RE = /^[A-ZÁÉÍÓÚÜÑ][A-ZÁÉÍÓÚÜÑ ]*$/;
 
+/** Lista unificada desde data/supervisores-cosecha.json (fuente de verdad) */
+let fromJson = null;
+let loadPromise = null;
+
+function mapFromByDni(byDni) {
+  if (!byDni || typeof byDni !== 'object') return [];
+  return Object.keys(byDni)
+    .map((dni) => {
+      const row = byDni[dni] || {};
+      return {
+        dni: limpiarDni(dni),
+        nombre: String(row.nombre || '').trim().toLocaleUpperCase('es-PE'),
+        fundo: 'LICAPA'
+      };
+    })
+    .filter((s) => s.dni.length >= 8 && s.nombre);
+}
+
+/** Carga y unifica supervisores-cosecha.json con el catálogo embebido */
+export function loadSupervisoresCosecha() {
+  if (fromJson?.length) return Promise.resolve(fromJson);
+  if (loadPromise) return loadPromise;
+  loadPromise = fetch('/data/supervisores-cosecha.json', { cache: 'no-cache' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((data) => {
+      const list = mapFromByDni(data?.byDni);
+      if (list.length) fromJson = list;
+      return fromJson || [];
+    })
+    .catch(() => [])
+    .finally(() => { loadPromise = null; });
+  return loadPromise;
+}
+
 function getCustomSupervisores() {
   try {
     const raw = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '[]');
@@ -81,10 +115,16 @@ function getCustomSupervisores() {
   }
 }
 
+function listaBase() {
+  if (fromJson?.length) return fromJson;
+  return SUPERVISORES;
+}
+
 function listaSupervisores() {
-  const seen = new Set(SUPERVISORES.map((s) => s.dni));
+  const base = listaBase();
+  const seen = new Set(base.map((s) => s.dni));
   const custom = getCustomSupervisores().filter((s) => !seen.has(s.dni));
-  return [...SUPERVISORES, ...custom];
+  return [...base, ...custom];
 }
 
 export function getSupervisores() {

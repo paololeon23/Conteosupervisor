@@ -22,11 +22,9 @@ function qtyCell(n) {
 }
 
 function buildComprobanteHtml(data, mode) {
-  const grupoNum = esc(data.grupoCosecha || '—');
+  const licapa = esc(data.licapa || data.grupoLabel || data.grupoCosecha || '—');
   const supervisor = esc((data.supervisor || '—').toUpperCase());
   const fecha = esc(formatFechaLima(data.fecha));
-  const modulo = esc(data.modulo || '—');
-  const turno = esc(data.turno || '—');
   const hora = esc((data.horaRegistro || nowTimeStr()).slice(0, 5));
   const totalPersonal = String(calcTotalPersonalFromPayload(data));
   const totalZonas = String(calcTotalZonasFromList(data.distribucionZonas));
@@ -75,7 +73,7 @@ function buildComprobanteHtml(data, mode) {
       <span class="comp-status__time">${fecha} · ${hora}</span>
     </div>
 
-    <div class="comp-banner comp-banner--head">GRUPO ${grupoNum} · ${supervisor}</div>
+    <div class="comp-banner comp-banner--head">${licapa} · ${supervisor}</div>
 
     <table class="comp-table comp-table--meta" aria-label="Fecha módulo turno">
       <tbody>
@@ -85,8 +83,7 @@ function buildComprobanteHtml(data, mode) {
             <strong>${fecha}</strong>
           </td>
           <td class="comp-meta__mods">
-            <div class="comp-meta__pill"><span>MÓD.</span> <strong>${modulo}</strong></div>
-            <div class="comp-meta__pill"><span>TURNO</span> <strong>${turno}</strong></div>
+            <div class="comp-meta__pill"><span>LICAPA</span> <strong>${licapa}</strong></div>
           </td>
         </tr>
       </tbody>

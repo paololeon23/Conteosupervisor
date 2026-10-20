@@ -1,4 +1,4 @@
-const CACHE = 'qb-conteo-v3.6.28';
+const CACHE = 'qb-conteo-v3.6.77';
 
 const ASSETS = [
   '/index.html',
@@ -23,16 +23,21 @@ const ASSETS = [
   '/core/supervisor-select.js',
   '/core/comprobante.js',
   '/core/save-conteo.js',
+  '/core/sync-notify.js',
   '/core/sup-resumen.js',
   '/core/export-excel.js',
   '/core/totals.js',
   '/core/icons.js',
   '/core/pwa.js',
+  '/core/pretty-select.js',
+  '/core/fab.js',
   '/data/lotes-licapa.json',
+  '/data/supervisores-cosecha.json',
   '/assets/favicon.svg',
   '/assets/icon-192.png',
   '/assets/icon-512.png',
   '/assets/logo-qberries.png',
+  '/assets/bus.png',
   '/manifest.webmanifest'
 ];
 
@@ -166,4 +171,131 @@ self.addEventListener('fetch', (e) => {
   }
 
   e.respondWith(respondAsset(request));
+});
+
+const IDB_NAME = 'qb_conteo_idb_v1';
+const IDB_STORE = 'kv';
+const QUEUE_KEY = 'qb_conteo_queue_v1';
+const HIST_KEY = 'qb_conteo_historial_v1';
+const REV_KEY = 'qb_queue_rev';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxBt01BESHhHZQdoUILCtGVoSsoQVc8LexaikPgnJUa8XfsCgqRvus14Qce_lKyTK9nxA/exec';
+const SCRIPT_TOKEN = 'TU_TOKEN_SECRETO';
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(IDB_STORE)) {
+        req.result.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbGet(key) {
+  return idbOpen().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  }));
+}
+
+function idbPut(key, val) {
+  return idbOpen().then((db) => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(val, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  }));
+}
+
+async function postGuardar(data) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 65000);
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'guardar', token: SCRIPT_TOKEN, data }),
+      redirect: 'follow',
+      cache: 'no-store',
+      signal: ctrl.signal
+    });
+    const text = await res.text();
+    try { return JSON.parse(text); } catch { return { ok: false, code: 'PARSE_ERROR' }; }
+  } catch (err) {
+    return { ok: false, code: err && err.name === 'AbortError' ? 'TIMEOUT' : 'NETWORK' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function flushDesdeSegundoPlano() {
+  const queue = await idbGet(QUEUE_KEY);
+  if (!Array.isArray(queue) || !queue.length) return;
+  const subidos = [];
+  for (const item of queue) {
+    const resp = await postGuardar({ ...item, editar: true });
+    if (!resp || resp.ok !== true) break;
+    subidos.push(item);
+  }
+  if (!subidos.length) return;
+
+  const done = new Set(subidos.map((item) => item.localId));
+  const fresh = await idbGet(QUEUE_KEY);
+  const siguiente = (Array.isArray(fresh) ? fresh : queue).filter((item) => !done.has(item.localId));
+  await idbPut(QUEUE_KEY, siguiente);
+
+  const historial = await idbGet(HIST_KEY);
+  const lista = Array.isArray(historial) ? historial : [];
+  subidos.forEach((item) => {
+    const idx = lista.findIndex((h) => h.localId === item.localId);
+    const patch = { ...item, status: 'synced', syncedAt: Date.now() };
+    if (idx >= 0) lista[idx] = { ...lista[idx], ...patch };
+    else lista.unshift(patch);
+  });
+  await idbPut(HIST_KEY, lista);
+  await idbPut(REV_KEY, Date.now());
+
+  const title = subidos.length === 1 ? 'Pendiente subido' : 'Pendientes subidos';
+  const body = subidos.length === 1
+    ? 'El conteo pendiente ya está en el servidor'
+    : subidos.length + ' conteos ya están en el servidor';
+  await self.registration.showNotification(title, {
+    body,
+    icon: '/assets/icon-192.png',
+    badge: '/assets/icon-192.png',
+    tag: 'qb-pendiente-subido',
+    renotify: true,
+    data: { tab: 'historial' }
+  });
+}
+
+self.addEventListener('sync', (event) => {
+  if (event.tag !== 'qb-flush-queue') return;
+  event.waitUntil((async () => {
+    const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (ventanas.length) {
+      ventanas.forEach((client) => client.postMessage({ type: 'qb-flush' }));
+      return;
+    }
+    await flushDesdeSegundoPlano();
+  })());
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const abierta = ventanas.find((client) => client.url.includes(self.location.origin));
+    if (abierta) {
+      await abierta.focus();
+      abierta.postMessage({ type: 'qb-flush' });
+      return;
+    }
+    await self.clients.openWindow('/');
+  })());
 });

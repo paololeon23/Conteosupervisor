@@ -108,7 +108,7 @@ function cardHtml(item) {
     .map(z => `${z.zona} (${z.cantidad})`)
     .join(' · ');
 
-  const grupo = item.grupoLabel || `Grupo ${item.grupoCosecha}`;
+  const grupo = item.licapa || item.grupoLabel || item.grupoCosecha || 'Conteo';
   const dni = limpiarDni(item.codSupervisor) || extraerDni(item.supervisor);
   const nombre = nombreVisible(item.supervisor) || item.supervisor || '—';
   const canEdit = Boolean(item.localId && dni);
@@ -120,17 +120,9 @@ function cardHtml(item) {
         <time class="hist-card__time">${formatFechaLima(item.fecha)} · ${formatHora(item.horaRegistro)}</time>
       </div>
       <h3 class="hist-card__title">${grupo}</h3>
-      <div class="hist-card__tags">
-        <span class="hist-tag">Lote ${item.lote || '—'}</span>
-        <span class="hist-tag">Mód. ${item.modulo}</span>
-        <span class="hist-tag">T${item.turno}</span>
-      </div>
       <p class="hist-card__supervisor">${nombre}${dni ? ` · ${dni}` : ''}</p>
       <div class="hist-card__stats">
         ${iconLabel('users', String(item.totalPersonal), 'hist-stat')}
-        ${iconLabel('utensils', String(item.almuerzos), 'hist-stat hist-stat--alm')}
-        ${iconLabel('clipboard-list', String(item.permisos), 'hist-stat hist-stat--perm')}
-        ${iconLabel('user-x', String(item.faltas), 'hist-stat hist-stat--falt')}
       </div>
       ${zonasTxt ? `<div class="hist-card__zonas"><span class="hist-card__zonas-label">Zonas</span><p>${zonasTxt}</p></div>` : ''}
       ${canEdit ? `

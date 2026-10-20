@@ -4,7 +4,9 @@
     *
     * Por cada conteo se escriben (en este orden fijo):
     *  N filas ZONA     → una fila por zona con cantidad
-    *  1 fila PERSONAL  → roles, total y almuerzos/permisos/faltas (siempre al final)
+    *  1 fila PERSONAL  → roles y total (siempre al final)
+    *
+    * Columnas: Hora | Licapa | DNI | Supervisor | Fecha | Tipo | Zona | Cantidad | roles…
     */
 
     var TZ = 'America/Lima';
@@ -12,34 +14,26 @@
 
     var COLUMNAS = [
       'Hora Registro',
-      'Grupo Cosecha', 'DNI', 'Supervisor', 'Fecha',
-      'Lote Mod Turno', 'Cod Lote', 'Variedad',
+      'Licapa', 'DNI', 'Supervisor', 'Fecha',
       'Tipo', 'Zona', 'Cantidad',
-      'Cosechadores', 'Escaner', 'Calidad', 'Cant Supervisor', 'Total Personal',
-      'Almuerzos', 'Permisos', 'Faltas'
+      'Cosechadores', 'Escaner', 'Calidad', 'Cant Supervisor', 'Total Personal'
     ];
 
-    // Índices de columna (0-based) — formato con DNI separado
+    // Índices de columna (0-based)
     var COL = {
       HORA: 0,
-      GRUPO: 1,
+      LICAPA: 1,
       DNI: 2,
       SUPERVISOR: 3,
       FECHA: 4,
-      LOTE_MOD: 5,
-      COD_LOTE: 6,
-      VARIEDAD: 7,
-      TIPO: 8,
-      ZONA: 9,
-      CANTIDAD: 10,
-      COSECHADORES: 11,
-      ESCANER: 12,
-      CALIDAD: 13,
-      CANT_SUP: 14,
-      TOTAL: 15,
-      ALMUERZOS: 16,
-      PERMISOS: 17,
-      FALTAS: 18
+      TIPO: 5,
+      ZONA: 6,
+      CANTIDAD: 7,
+      COSECHADORES: 8,
+      ESCANER: 9,
+      CALIDAD: 10,
+      CANT_SUP: 11,
+      TOTAL: 12
     };
 
     function doGet(e) {
@@ -77,7 +71,8 @@
         if (action === 'consultar') return consultar_(body.data || body);
         if (action === 'dashboard') {
           var fechaDash = body.fecha || param_(e, 'fecha') || '';
-          return dashboard_(fechaDash);
+          var licapaDash = body.licapa || param_(e, 'licapa') || '';
+          return dashboard_(fechaDash, licapaDash);
         }
 
         return { ok: false, message: 'Acción no válida. Use: ping, guardar, consultar o dashboard' };
@@ -104,7 +99,7 @@
       }
 
       var lock = LockService.getScriptLock();
-      if (!lock.tryLock(15000)) {
+      if (!lock.tryLock(8000)) {
         return { ok: false, message: 'Servidor ocupado — reintente' };
       }
 
@@ -134,13 +129,10 @@
 
         var base = {
           horaRegistro: d.horaRegistro || hora_(),
-          grupoCosecha: num_(d.grupoCosecha),
+          licapa: texto_(d.licapa) || texto_(d.grupoCosecha) || texto_(d.loteModTurno) || '',
           dni: dni,
           supervisor: nombreSup,
-          fecha: fecha,
-          loteModTurno: loteModTurno_(d),
-          codLote: texto_(d.codLote),
-          variedad: texto_(d.variedad)
+          fecha: fecha
         };
 
         var cosechadores = num_(d.cosechadores);
@@ -159,7 +151,7 @@
           if (!nombre || cant <= 0) continue;
           filas.push(fila_(base, 'ZONA', nombre, cant, {
             cosechadores: '', escaner: '', calidad: '', supervisorCount: '',
-            totalPersonal: '', almuerzos: '', permisos: '', faltas: ''
+            totalPersonal: ''
           }));
         }
 
@@ -168,16 +160,10 @@
           escaner: escaner,
           calidad: calidad,
           supervisorCount: supervisorCount,
-          totalPersonal: totalPersonal,
-          almuerzos: num_(d.almuerzos),
-          permisos: num_(d.permisos),
-          faltas: num_(d.faltas)
+          totalPersonal: totalPersonal
         }));
 
-        var primera = hoja.getLastRow() + 1;
-        for (var j = 0; j < filas.length; j++) {
-          hoja.appendRow(filas[j]);
-        }
+        var escrito = escribirFilasNuevas_(hoja, filas);
 
         if (localId) marcarGuardado_(localId);
         invalidarDashboardCache_();
@@ -186,8 +172,8 @@
           ok: true,
           updated: actualizado,
           filas: filas.length,
-          desde: primera,
-          hasta: hoja.getLastRow(),
+          desde: escrito.desde,
+          hasta: escrito.hasta,
           message: (actualizado ? 'Actualizado' : 'Guardado') +
             ' — ' + filas.length + ' filas · Total ' + totalPersonal + ' pers.'
         };
@@ -246,7 +232,7 @@
         if (zonaNom && cant > 0) zonas.push({ zona: zonaNom, cantidad: cant });
       }
 
-      var lmt = parseLoteModTurno_(personal[COL.LOTE_MOD]);
+      var licapaVal = String(personal[COL.LICAPA] || '').trim();
       var nombreSup = String(personal[COL.SUPERVISOR] || '').trim();
 
       return {
@@ -255,24 +241,25 @@
         fecha: fecha,
         codSupervisor: dni,
         data: {
-          grupoCosecha: String(personal[COL.GRUPO] || '').trim(),
+          licapa: licapaVal,
+          grupoCosecha: licapaVal,
           supervisor: nombreSup,
           supervisorNombre: nombreSup,
           codSupervisor: dni,
           dni: dni,
           fecha: fecha,
-          lote: lmt.lote,
-          modulo: lmt.modulo,
-          turno: lmt.turno,
-          codLote: String(personal[COL.COD_LOTE] || '').trim(),
-          variedad: String(personal[COL.VARIEDAD] || '').trim(),
+          lote: '',
+          modulo: '',
+          turno: '',
+          codLote: '',
+          variedad: '',
           cosechadores: num_(personal[COL.COSECHADORES]),
           escaner: num_(personal[COL.ESCANER]),
           calidad: num_(personal[COL.CALIDAD]),
           supervisorCount: num_(personal[COL.CANT_SUP]),
-          almuerzos: num_(personal[COL.ALMUERZOS]),
-          permisos: num_(personal[COL.PERMISOS]),
-          faltas: num_(personal[COL.FALTAS]),
+          almuerzos: 0,
+          permisos: 0,
+          faltas: 0,
           distribucionZonas: zonas,
           horaRegistro: horaTexto_(personal[COL.HORA])
         }
@@ -282,7 +269,7 @@
     function batchKey_(row, fechaNorm) {
       return [
         String(row[COL.HORA] || ''),
-        String(row[COL.GRUPO] || ''),
+        String(row[COL.LICAPA] || ''),
         String(row[COL.DNI] || ''),
         fechaNorm || fechaCelda_(row[COL.FECHA], '')
       ].join('|');
@@ -322,10 +309,24 @@
       return indices;
     }
 
+    /** Borra por bloques contiguos (mucho más rápido que deleteRow uno a uno). */
     function borrarFilas_(hoja, indices) {
-      indices = indices.slice().sort(function (a, b) { return b - a; });
-      for (var i = 0; i < indices.length; i++) {
-        hoja.deleteRow(indices[i]);
+      if (!indices || !indices.length) return;
+      var sorted = indices.slice().sort(function (a, b) { return a - b; });
+      var bloques = [];
+      var ini = sorted[0];
+      var fin = sorted[0];
+      for (var i = 1; i < sorted.length; i++) {
+        if (sorted[i] === fin + 1) {
+          fin = sorted[i];
+        } else {
+          bloques.push([ini, fin]);
+          ini = fin = sorted[i];
+        }
+      }
+      bloques.push([ini, fin]);
+      for (var b = bloques.length - 1; b >= 0; b--) {
+        hoja.deleteRows(bloques[b][0], bloques[b][1] - bloques[b][0] + 1);
       }
     }
 
@@ -345,20 +346,6 @@
       return m ? m[1].trim() : s;
     }
 
-    function parseLoteModTurno_(raw) {
-      var s = String(raw || '');
-      var lote = '';
-      var modulo = '';
-      var turno = '';
-      var ml = s.match(/L\s*([0-9A-Za-z]+)/i);
-      var mm = s.match(/M\s*(\d+)/i);
-      var mt = s.match(/T\s*(\d+)/i);
-      if (ml) lote = ml[1];
-      if (mm) modulo = mm[1];
-      if (mt) turno = mt[1];
-      return { lote: lote, modulo: modulo, turno: turno };
-    }
-
     function yaGuardado_(localId) {
       return CacheService.getScriptCache().get('lid_' + localId) !== null;
     }
@@ -373,10 +360,11 @@
     * - Filas ZONA → personas por zona
     * fecha vacío / "hoy" = hoy Lima; "all" = todas las fechas
     */
-    function dashboard_(fechaFiltro) {
+    function dashboard_(fechaFiltro, licapaFiltro) {
       var filtroRaw = String(fechaFiltro || '').trim();
       var todas = filtroRaw.toLowerCase() === 'all' || filtroRaw === '*';
       var filtro = todas ? 'all' : resolverFechaFiltro_(filtroRaw);
+      var licapaSel = normalizarLicapa_(licapaFiltro);
 
       var hoja = obtenerHoja_();
       asegurarEncabezados_(hoja);
@@ -400,6 +388,7 @@
       var fechasMap = {};
       var filasLeidas = 0;
       var omitidas = 0;
+      var licapasMap = {};
 
       for (var i = 0; i < data.length; i++) {
         var row = data[i];
@@ -411,6 +400,13 @@
         if (fecha) fechasMap[fecha] = true;
 
         if (!todas && fecha !== filtro) {
+          omitidas++;
+          continue;
+        }
+
+        var licapaFila = filaLicapa_(row);
+        if (licapaFila) licapasMap[licapaFila] = true;
+        if (licapaSel && licapaFila !== licapaSel) {
           omitidas++;
           continue;
         }
@@ -428,7 +424,7 @@
           var cal = num_(row[COL.CALIDAD]);
           var supC = num_(row[COL.CANT_SUP]);
           var tot = num_(row[COL.TOTAL]) || (cos + esc + cal + supC);
-          var grupo = String(row[COL.GRUPO] || '').trim();
+          var grupo = String(row[COL.LICAPA] || '').trim();
 
           if (!bySup[key]) {
             bySup[key] = {
@@ -462,9 +458,6 @@
           totales.calidad += cal;
           totales.supervisorCount += supC;
           totales.total += tot;
-          totales.almuerzos += num_(row[COL.ALMUERZOS]);
-          totales.permisos += num_(row[COL.PERMISOS]);
-          totales.faltas += num_(row[COL.FALTAS]);
           conteos += 1;
         } else {
           var zona = String(row[COL.ZONA] || '').trim().toUpperCase();
@@ -544,16 +537,41 @@
       }
       fechasEncontradas.sort();
 
+      var licapas = [];
+      for (var lk in licapasMap) {
+        if (licapasMap.hasOwnProperty(lk)) licapas.push(lk);
+      }
+      licapas.sort();
+
       var result = armarResultado_(todas ? 'all' : filtro, totales, supervisores, zonas, conteos, {
         hoyServidor: hoy_(),
         fechasEncontradas: fechasEncontradas,
         filasLeidas: filasLeidas,
         filasOmitidasPorFecha: omitidas,
         hoja: hoja.getName(),
-        soloHoyEnBase: !todas && fechasEncontradas.length === 1 && fechasEncontradas[0] === filtro
+        soloHoyEnBase: !todas && fechasEncontradas.length === 1 && fechasEncontradas[0] === filtro,
+        licapa: licapaSel || '',
+        licapas: licapas
       });
 
       return result;
+    }
+
+    /** LICAPA I–IV desde columna Licapa */
+    function normalizarLicapa_(v) {
+      var s = String(v || '').trim().toUpperCase().replace(/\s+/g, ' ');
+      var m = s.match(/LICAPA\s*(IV|III|II|I|4|3|2|1)\b/);
+      if (!m) return '';
+      var n = m[1];
+      if (n === '1') n = 'I';
+      if (n === '2') n = 'II';
+      if (n === '3') n = 'III';
+      if (n === '4') n = 'IV';
+      return 'LICAPA ' + n;
+    }
+
+    function filaLicapa_(row) {
+      return normalizarLicapa_(row[COL.LICAPA]);
     }
 
     function resolverFechaFiltro_(raw) {
@@ -603,6 +621,7 @@
         conteos: 0
       };
     }
+    // almuerzos/permisos/faltas quedan en 0 (compat API; ya no hay columnas)
 
     /** Fecha de la celda: primero lo que se ve en el Sheet, luego el valor crudo */
     function fechaCelda_(valor, display) {
@@ -670,13 +689,10 @@
       extra = extra || {};
       return [
         base.horaRegistro,
-        base.grupoCosecha,
+        base.licapa,
         base.dni,
         base.supervisor,
         base.fecha,
-        base.loteModTurno,
-        base.codLote,
-        base.variedad,
         tipo,
         zona,
         cantidad === '' ? '' : num_(cantidad),
@@ -684,59 +700,152 @@
         extra.escaner === '' ? '' : num_(extra.escaner),
         extra.calidad === '' ? '' : num_(extra.calidad),
         extra.supervisorCount === '' ? '' : num_(extra.supervisorCount),
-        extra.totalPersonal === '' ? '' : num_(extra.totalPersonal),
-        extra.almuerzos === '' ? '' : num_(extra.almuerzos),
-        extra.permisos === '' ? '' : num_(extra.permisos),
-        extra.faltas === '' ? '' : num_(extra.faltas)
+        extra.totalPersonal === '' ? '' : num_(extra.totalPersonal)
       ];
     }
 
+    /**
+     * Escribe filas nuevas al final. Evita el error
+     * "datos tienen N y el rango M" (setValues desfasado).
+     */
+    function escribirFilasNuevas_(hoja, filas) {
+      var n = filas.length;
+      var cols = COLUMNAS.length;
+      if (n < 1) return { desde: 0, hasta: 0 };
+
+      var mat = [];
+      for (var i = 0; i < n; i++) {
+        var row = (filas[i] || []).slice(0, cols);
+        while (row.length < cols) row.push('');
+        mat.push(row);
+      }
+
+      var start = Math.max(hoja.getLastRow() + 1, 2);
+      try {
+        hoja.getRange(start, 1, start + n - 1, cols).setValues(mat);
+      } catch (errSet) {
+        // Fallback seguro fila a fila
+        for (var k = 0; k < mat.length; k++) {
+          hoja.appendRow(mat[k]);
+        }
+        start = hoja.getLastRow() - n + 1;
+      }
+      return { desde: start, hasta: start + n - 1 };
+    }
+
+    function headerEq_(a, b) {
+      return String(a || '').trim().toUpperCase() === String(b || '').trim().toUpperCase();
+    }
+
+    /** Formato actual slim: Licapa | DNI | … | Tipo en col F */
+    function encabezadosEstructuraOk_(headers) {
+      if (!headers || headers.length < 6) return false;
+      var dniOk = headerEq_(headers[COL.DNI], 'DNI') ||
+        headerEq_(headers[COL.DNI], 'COD SUPERVISOR') ||
+        headerEq_(headers[COL.DNI], 'CODIGO');
+      var tipoOk = headerEq_(headers[COL.TIPO], 'Tipo') ||
+        headerEq_(headers[COL.TIPO], 'TIPO FILA') ||
+        headerEq_(headers[COL.TIPO], 'TIPO REGISTRO');
+      var licapaOk = headerEq_(headers[COL.LICAPA], 'Licapa') ||
+        headerEq_(headers[COL.LICAPA], 'Grupo Cosecha') ||
+        headerEq_(headers[COL.LICAPA], 'LICAPA');
+      return dniOk && tipoOk && licapaOk;
+    }
+
+    /** Formato ancho anterior (19 cols): Tipo en col I, Cod Lote / Almuerzos, etc. */
+    function esFormatoAnchoViejo_(headers) {
+      if (!headers || headers.length < 15) return false;
+      if (headerEq_(headers[8], 'Tipo') && (
+        headerEq_(headers[1], 'Grupo Cosecha') ||
+        headerEq_(headers[5], 'Lote Mod Turno') ||
+        headerEq_(headers[5], 'Licapa') ||
+        headerEq_(headers[6], 'Cod Lote') ||
+        headerEq_(headers[16], 'Almuerzos')
+      )) return true;
+      return false;
+    }
+
+    function encabezadosIguales_(headers) {
+      if (!headers || headers.length < COLUMNAS.length) return false;
+      for (var i = 0; i < COLUMNAS.length; i++) {
+        if (!headerEq_(headers[i], COLUMNAS[i])) return false;
+      }
+      return true;
+    }
+
+    function escribirEncabezados_(hoja) {
+      hoja.getRange(1, 1, 1, COLUMNAS.length).setValues([COLUMNAS]);
+      estilizarEncabezados_(hoja, COLUMNAS.length);
+    }
+
+    /**
+     * Asegura fila 1 = COLUMNAS.
+     * Migra formato ancho viejo → slim. Nunca inserta filas de encabezado extra.
+     */
     function asegurarEncabezados_(hoja) {
+      // Cache: no re-leer / migrar en cada Guardar (era lento)
+      try {
+        if (CacheService.getScriptCache().get('hdr_slim_v4') === '1') return;
+      } catch (eCache) { /* ok */ }
+
       var lastRow = hoja.getLastRow();
       var lastCol = Math.max(hoja.getLastColumn(), 1);
 
       if (lastRow === 0) {
-        hoja.appendRow(COLUMNAS);
-        estilizarEncabezados_(hoja, COLUMNAS.length);
+        escribirEncabezados_(hoja);
+        try { CacheService.getScriptCache().put('hdr_slim_v4', '1', 21600); } catch (e1) { /* ok */ }
         return;
       }
 
-      var headers = limpiarHeaders_(hoja.getRange(1, 1, 1, lastCol).getValues()[0]);
+      var raw = hoja.getRange(1, 1, 1, Math.max(lastCol, 19)).getValues()[0];
+      var headers = [];
+      for (var i = 0; i < raw.length; i++) {
+        headers.push(String(raw[i] || '').trim());
+      }
 
-      // Formato nuevo: DNI | Supervisor | … | Tipo
-      if (headers[2] === 'DNI' && headers[3] === 'Supervisor' && headers[8] === 'Tipo') {
+      if (encabezadosIguales_(headers)) {
+        try { CacheService.getScriptCache().put('hdr_slim_v4', '1', 21600); } catch (e2) { /* ok */ }
         return;
       }
 
-      // Formato viejo: Supervisor combinado (sin col DNI) → migrar
-      if (headers[2] === 'Supervisor' && headers[7] === 'Tipo') {
+      // Sin col DNI (Supervisor en C, Tipo en H)
+      if (headerEq_(headers[2], 'Supervisor') && headerEq_(headers[7], 'Tipo')) {
         migrarSepararDni_(hoja);
+        migrarAFormatoSlim_(hoja);
         return;
       }
 
-      if (lastRow <= 1) {
-        hoja.clear();
-        hoja.appendRow(COLUMNAS);
-      } else {
-        hoja.insertRowBefore(1);
-        hoja.getRange(1, 1, 1, COLUMNAS.length).setValues([COLUMNAS]);
+      if (esFormatoAnchoViejo_(headers)) {
+        migrarAFormatoSlim_(hoja);
+        return;
       }
-      estilizarEncabezados_(hoja, COLUMNAS.length);
+
+      if (encabezadosEstructuraOk_(headers)) {
+        escribirEncabezados_(hoja);
+        try { CacheService.getScriptCache().put('hdr_slim_v4', '1', 21600); } catch (e3) { /* ok */ }
+        return;
+      }
+
+      if (lastRow > 1) {
+        escribirEncabezados_(hoja);
+        try { CacheService.getScriptCache().put('hdr_slim_v4', '1', 21600); } catch (e4) { /* ok */ }
+        return;
+      }
+
+      hoja.clear();
+      escribirEncabezados_(hoja);
+      try { CacheService.getScriptCache().put('hdr_slim_v4', '1', 21600); } catch (e5) { /* ok */ }
     }
 
-    /** Inserta col DNI y parte "75075892 · NOMBRE" en DNI + Supervisor */
+    /** Inserta col DNI y parte "75075892 · NOMBRE" (formato pre-DNI). */
     function migrarSepararDni_(hoja) {
-      hoja.insertColumnAfter(2); // nueva col C = DNI; viejo Supervisor pasa a D
+      hoja.insertColumnAfter(2);
       var lastRow = hoja.getLastRow();
-      hoja.getRange(1, 1, 1, COLUMNAS.length).setValues([COLUMNAS]);
-      estilizarEncabezados_(hoja, COLUMNAS.length);
-
       if (lastRow < 2) {
         invalidarDashboardCache_();
         return;
       }
-
-      var range = hoja.getRange(2, 3, lastRow, 4); // C–D
+      var range = hoja.getRange(2, 3, lastRow, 4);
       var values = range.getValues();
       for (var i = 0; i < values.length; i++) {
         var combinado = String(values[i][1] || '').trim();
@@ -750,15 +859,59 @@
       invalidarDashboardCache_();
     }
 
-    function loteModTurno_(d) {
-      var partes = [];
-      var lote = texto_(d.lote);
-      var mod = num_(d.modulo);
-      var turno = num_(d.turno);
-      if (lote) partes.push('L' + lote);
-      if (mod) partes.push('M' + mod);
-      if (turno) partes.push('T' + turno);
-      return partes.join(' · ');
+    /**
+     * Convierte hoja ancha (Grupo Cosecha + Lote Mod + Cod Lote + Variedad + Almuerzos…)
+     * al formato slim con columna Licapa.
+     * Índices viejos: 0 Hora, 1 Grupo, 2 DNI, 3 Sup, 4 Fecha, 5 LoteMod/Licapa,
+     * 6 CodLote, 7 Variedad, 8 Tipo, 9 Zona, 10 Cant, 11–15 roles, 16–18 alm/perm/fal
+     */
+    function migrarAFormatoSlim_(hoja) {
+      var lastRow = hoja.getLastRow();
+      var lastCol = Math.max(hoja.getLastColumn(), 19);
+      if (lastRow < 2) {
+        hoja.clear();
+        escribirEncabezados_(hoja);
+        invalidarDashboardCache_();
+        return;
+      }
+
+      var data = hoja.getRange(2, 1, lastRow, lastCol).getValues();
+      var out = [];
+      for (var i = 0; i < data.length; i++) {
+        var r = data[i];
+        var tipo = String(r[8] || '').trim().toUpperCase();
+        if (tipo !== 'ZONA' && tipo !== 'PERSONAL') continue;
+        var licapa = normalizarLicapa_(r[1]) || normalizarLicapa_(r[5]) ||
+          String(r[1] || r[5] || '').trim().toUpperCase();
+        out.push([
+          r[0],
+          licapa,
+          r[2],
+          r[3],
+          r[4],
+          r[8],
+          r[9],
+          r[10],
+          r[11],
+          r[12],
+          r[13],
+          r[14],
+          r[15]
+        ]);
+      }
+
+      hoja.clear();
+      escribirEncabezados_(hoja);
+      if (out.length) {
+        escribirFilasNuevas_(hoja, out);
+      }
+      // Quitar columnas sobrantes a la derecha
+      var maxCol = hoja.getMaxColumns();
+      if (maxCol > COLUMNAS.length) {
+        hoja.deleteColumns(COLUMNAS.length + 1, maxCol - COLUMNAS.length);
+      }
+      try { CacheService.getScriptCache().remove('hdr_slim_v4'); } catch (eMig) { /* ok */ }
+      invalidarDashboardCache_();
     }
 
     function limpiarHeaders_(arr) {
@@ -943,7 +1096,7 @@
       dash.getRange('J5:K7').setValues([
         ['Personal', t.total || 0],
         ['Conteos', t.conteos || 0],
-        ['Almuerzos', t.almuerzos || 0]
+        ['Sup.', t.supervisoresUnicos || 0]
       ]);
 
       var nSup = Math.max(supRows.length, 1);
@@ -960,7 +1113,7 @@
           .setOption('chartArea', { left: 10, top: 36, width: '90%', height: '78%' })
           .setOption('width', 340)
           .setOption('height', 220)
-          .setOption('colors', ['#52AD4B', '#3B82F6', '#F7941E', '#D61F26'])
+          .setOption('colors', ['#1f6b45', '#3B82F6', '#F7941E', '#D61F26'])
           .build()
       );
 
@@ -975,7 +1128,7 @@
           .setOption('hAxis', { minValue: 0, gridlines: { count: 4 }, textStyle: { fontSize: 9 }, format: '0' })
           .setOption('vAxis', { textStyle: { fontSize: 9 } })
           .setOption('series', { 0: { dataLabel: 'none' } })
-          .setOption('colors', ['#52AD4B'])
+          .setOption('colors', ['#1f6b45'])
           .setOption('width', 340)
           .setOption('height', 220)
           .build()
@@ -1018,7 +1171,7 @@
       dash.getRange('A28').setValue('Personal');
       dash.getRange('B28').setValue(t.total || 0).setFontSize(22).setFontWeight('bold').setFontColor('#D61F26');
       dash.getRange('C28').setValue('Conteos');
-      dash.getRange('D28').setValue(t.conteos || 0).setFontSize(22).setFontWeight('bold').setFontColor('#52AD4B');
+      dash.getRange('D28').setValue(t.conteos || 0).setFontSize(22).setFontWeight('bold').setFontColor('#1f6b45');
       dash.getRange('E28').setValue('Sup.');
       dash.getRange('F28').setValue(t.supervisoresUnicos || 0).setFontSize(22).setFontWeight('bold').setFontColor('#3B82F6');
 

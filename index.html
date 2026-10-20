@@ -76,38 +76,33 @@
       <button type="button" id="btn-install-dismiss" class="install-banner__close" aria-label="Ocultar">×</button>
     </div>
 
-    <nav class="tabs" role="tablist">
-      <button class="tab-btn tab-btn--active" data-tab="conteo" role="tab">Conteo</button>
-      <button class="tab-btn" data-tab="data" role="tab">Ver data</button>
-      <button class="tab-btn" data-tab="historial" role="tab">Historial</button>
-    </nav>
-
-    <section id="tab-conteo" class="tab-panel tab-panel--active" role="tabpanel">
+    <section id="tab-conteo" class="tab-panel tab-panel--active" role="tabpanel" data-page="conteo">
       <form id="form-conteo" autocomplete="off" novalidate>
 
-        <!-- Cabecera: Grupo, Supervisor, Fecha, Lote -->
-        <div class="card card--header">
-          <h2 class="card__title">Grupo de Cosecha</h2>
-          <div class="field-row">
-            <div class="field">
-              <label>Grupo</label>
-              <button type="button" id="btn-pick-grupo" class="btn btn--zona btn--pick-compact">
-                <span id="grupo-btn-label">Elegir grupo</span>
-              </button>
-              <input type="hidden" id="grupo" required>
-              <input type="hidden" id="grupo-label">
-            </div>
-            <div class="field">
-              <label>Fecha</label>
-              <button type="button" id="btn-pick-fecha" class="btn btn--zona btn--pick-compact btn--pick-filled btn--fecha-locked" disabled aria-disabled="true" title="Fecha del día (fija)">
-                <span id="fecha-label">Elegir fecha</span>
-              </button>
-              <input type="hidden" id="fecha" required>
-            </div>
+        <div class="card card--header sheet">
+          <div class="section-head">
+            <h2 class="section-title">Licapa</h2>
+            <p class="section-sub">Elija el fundo de este conteo.</p>
+          </div>
+          <label class="licapa-select" for="licapa">
+            <select id="licapa" required>
+              <option value="">Seleccione</option>
+              <option value="LICAPA I">LICAPA I</option>
+              <option value="LICAPA II">LICAPA II</option>
+              <option value="LICAPA III">LICAPA III</option>
+              <option value="LICAPA IV">LICAPA IV</option>
+            </select>
+          </label>
+          <input type="hidden" id="fecha" required>
+        </div>
+
+        <div class="card sheet sheet--dni">
+          <div class="section-head">
+            <h2 class="section-title">Ingresa el DNI del supervisor</h2>
+            <p class="section-sub" id="campo-chip">Escribe el DNI. El nombre aparece al identificarlo.</p>
           </div>
           <div class="field">
-            <label for="supervisor-dni">DNI supervisor</label>
-            <input type="text" id="supervisor-dni" inputmode="numeric" maxlength="9" placeholder="Ingrese su DNI" autocomplete="off" required>
+            <input type="text" id="supervisor-dni" class="field-input" inputmode="numeric" maxlength="9" placeholder="DNI" autocomplete="off" required>
             <input type="hidden" id="codSupervisor">
             <input type="hidden" id="supervisor">
             <p id="supervisor-nombre" class="pick-preview" hidden></p>
@@ -121,91 +116,54 @@
               <p id="supervisor-alta-msg" class="zona-nueva__msg" hidden></p>
             </div>
           </div>
-          <div class="field">
-            <label>Lote</label>
-            <button type="button" id="btn-pick-lote" class="btn btn--zona">Buscar lote</button>
-            <input type="hidden" id="lote">
-            <input type="hidden" id="codLote">
-            <input type="hidden" id="variedad">
-            <p id="lote-preview" class="pick-preview" hidden></p>
-            <input type="hidden" id="modulo">
-            <input type="hidden" id="turno">
-          </div>
         </div>
 
         <!-- Personal por rol (conteo de personas) -->
         <div class="conteo-mid">
-        <div class="card card--personal">
-          <h2 class="card__title">Personal</h2>
-          <p class="card__hint">Cuántas <strong>personas</strong> hay en cada rol</p>
+        <div class="card card--personal sheet">
+          <div class="section-head">
+            <h2 class="section-title">Personal</h2>
+            <p class="section-sub">Cuántas personas hay en cada rol.</p>
+          </div>
           <div id="roles-grid" class="num-grid"></div>
           <div id="total-personal-box" class="total-box total-box--blue">
             <span class="total-box__label">Total</span>
             <strong id="total-personal">0</strong>
-            <span id="total-personal-formula" class="total-box__formula" hidden></span>
           </div>
         </div>
 
         <!-- Distribución por zonas (mismas personas repartidas) -->
-        <div class="card card--zonas">
-          <h2 class="card__title">Distribución por Zonas</h2>
-          <p class="card__hint">Reparta el total entre zonas.</p>
-          <div id="zonas-list" class="zonas-list"></div>
-          <button type="button" id="btn-add-zona" class="btn btn--zona">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          Buscar zona
-        </button>
-
-          <div class="zona-nueva">
-            <label for="zona-nueva-input">Agregar zona nueva <span class="zona-nueva__tag">solo local</span></label>
-            <div class="zona-nueva__row">
-              <input type="text" id="zona-nueva-input" maxlength="40" placeholder="Ej. MI ZONA" autocomplete="off" autocapitalize="characters">
-              <button type="button" id="btn-zona-nueva" class="btn btn--zona-nueva">Agregar</button>
+        <div class="card card--zonas sheet">
+          <div class="zonas-head">
+            <div class="section-head">
+              <h2 class="section-title">Distribución por zonas</h2>
+              <p class="section-sub">Reparta el total entre las zonas.</p>
             </div>
-            <p id="zona-nueva-msg" class="zona-nueva__msg" hidden></p>
+            <img class="zonas-bus" src="/assets/bus.png" alt="" width="1024" height="576">
+          </div>
+          <div id="zonas-list" class="zonas-list"></div>
+
+          <div class="zonas-actions">
+            <button type="button" id="btn-add-zona" class="btn btn--zona">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              Buscar zona
+            </button>
+
+            <div class="zona-nueva">
+              <label for="zona-nueva-input">Agregar zona nueva <span class="zona-nueva__tag">solo local</span></label>
+              <div class="zona-nueva__row">
+                <input type="text" id="zona-nueva-input" maxlength="40" placeholder="Ej. MI ZONA" autocomplete="off" autocapitalize="characters">
+                <button type="button" id="btn-zona-nueva" class="btn btn--zona-nueva">Agregar</button>
+              </div>
+              <p id="zona-nueva-msg" class="zona-nueva__msg" hidden></p>
+            </div>
           </div>
 
           <div id="total-zonas-box" class="total-box total-box--green">
             <span class="total-box__label">En zonas</span>
             <strong id="total-zonas">0</strong>
-            <span id="total-zonas-formula" class="total-box__formula" hidden></span>
           </div>
         </div>
-        </div>
-
-        <!-- Almuerzos, Permisos, Faltas -->
-        <div class="card card--resumen-dia">
-          <h2 class="card__title">Resumen del día</h2>
-          <div class="resumen-grid">
-            <div class="num-field resumen--alm">
-              <label for="almuerzos" class="resumen-tile__label">
-                <span class="resumen-tile__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>
-                </span>
-                <span class="resumen-tile__name">Almuerzos</span>
-              </label>
-              <input type="number" id="almuerzos" min="0" inputmode="numeric" placeholder="0" class="num-input resumen-tile__input">
-            </div>
-            <div class="num-field resumen--perm">
-              <label for="permisos" class="resumen-tile__label">
-                <span class="resumen-tile__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>
-                </span>
-                <span class="resumen-tile__name">Permisos</span>
-              </label>
-              <input type="number" id="permisos" min="0" inputmode="numeric" placeholder="0" class="num-input resumen-tile__input">
-            </div>
-            <div class="num-field resumen--falt">
-              <label for="faltas" class="resumen-tile__label">
-                <span class="resumen-tile__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" x2="22" y1="8" y2="13"/><line x1="22" x2="17" y1="8" y2="13"/></svg>
-                </span>
-                <span class="resumen-tile__name">Faltas</span>
-              </label>
-              <input type="number" id="faltas" min="0" inputmode="numeric" placeholder="0" class="num-input resumen-tile__input">
-            </div>
-          </div>
-          <p class="resumen-note">Máx. = total personas</p>
         </div>
 
         <div class="form-actions">
@@ -214,43 +172,87 @@
       </form>
     </section>
 
-    <section id="tab-data" class="tab-panel" role="tabpanel">
-      <div class="data-panel">
-        <div class="data-toolbar">
-          <div class="data-toolbar__left">
-            <div class="data-toolbar__filters">
-              <button type="button" id="btn-data-hoy" class="data-filter is-active">Hoy</button>
-              <button type="button" id="btn-data-all" class="data-filter">Todo</button>
+    <section id="tab-data" class="tab-panel" role="tabpanel" data-page="data">
+      <div class="data-desk">
+        <div class="data-panel">
+          <header class="data-corp-top">
+            <div class="data-corp-brand">
+              <img src="/assets/logo-qberries.png" alt="" width="40" height="40">
+              <div>
+                <strong>Q Berries</strong>
+                <span>Dashboard de conteo</span>
+              </div>
             </div>
-            <button type="button" id="btn-data-faltan" class="data-faltan" hidden aria-label="Validar supervisores">
-              Validar <strong id="data-faltan-count">0</strong>
-            </button>
+          </header>
+
+          <div class="sheet data-page-head data-hero">
+            <div class="data-hero__text">
+              <div class="section-head">
+                <h2 class="section-title">
+                  <span class="only-mobile">Ver data</span>
+                  <span class="only-desk">Personal en campo</span>
+                </h2>
+                <p class="section-sub">
+                  <span class="only-mobile">Los totales del día se separan por Licapa.</span>
+                  <span class="only-desk">Totales del día por Licapa. Filtre el fundo para ver el detalle.</span>
+                </p>
+              </div>
+              <div class="data-hero__actions">
+                <button type="button" id="btn-ver-resumen-data" class="btn btn--primary btn--save data-resumen-btn">
+                  Ver resumen
+                </button>
+              </div>
+            </div>
+            <label class="licapa-select" for="data-licapa">Licapa
+              <select id="data-licapa">
+                <option value="">Todas</option>
+                <option value="LICAPA I">LICAPA I</option>
+                <option value="LICAPA II">LICAPA II</option>
+                <option value="LICAPA III">LICAPA III</option>
+                <option value="LICAPA IV">LICAPA IV</option>
+              </select>
+            </label>
           </div>
-          <div class="data-toolbar__right">
-            <span id="data-status" class="data-status">—</span>
-            <button type="button" id="btn-data-refresh" class="data-refresh" aria-label="Actualizar">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                <path d="M3 3v5h5"/>
-                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
-                <path d="M16 16h5v5"/>
-              </svg>
-            </button>
+
+          <div class="data-toolbar">
+            <div class="data-toolbar__left">
+              <div class="data-toolbar__filters">
+                <button type="button" id="btn-data-hoy" class="data-filter is-active">Hoy</button>
+                <button type="button" id="btn-data-all" class="data-filter">Todo</button>
+              </div>
+              <button type="button" id="btn-data-faltan" class="data-faltan" hidden aria-label="Validar supervisores">
+                Validar <strong id="data-faltan-count">0</strong>
+              </button>
+            </div>
+            <div class="data-toolbar__right">
+              <span id="data-status" class="data-status">—</span>
+              <button type="button" id="btn-data-refresh" class="data-refresh" aria-label="Actualizar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                  <path d="M3 3v5h5"/>
+                  <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+                  <path d="M16 16h5v5"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="data-desk__main">
+            <div id="data-kpis" class="data-kpis-host" aria-label="Indicadores"></div>
+            <div id="data-root" class="data-root"></div>
           </div>
         </div>
-          <button type="button" id="btn-ver-resumen-data" class="btn btn--primary btn--save data-resumen-btn">
-            Ver resumen
-          </button>
-        <div id="data-root" class="data-root"></div>
       </div>
     </section>
 
-    <section id="tab-historial" class="tab-panel" role="tabpanel">
+    <section id="tab-historial" class="tab-panel" role="tabpanel" data-page="historial">
       <div class="historial-panel">
-        <div class="historial-header">
+        <div class="historial-header sheet">
           <div class="historial-header__text">
-            <h2 class="historial-header__title">Historial</h2>
-            <p class="historial-header__sub">Conteos en este celular · 48 h</p>
+            <div class="section-head">
+              <h2 class="section-title">Historial personal</h2>
+              <p class="section-sub">Solo los conteos de este celular. Cada supervisor ve los suyos.</p>
+            </div>
           </div>
           <span id="historial-count" class="historial-count">0</span>
         </div>
@@ -278,15 +280,6 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
             </button>
           </nav>
-          <button type="button" id="btn-refresh-app" class="btn-refresh-app">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-              <path d="M3 3v5h5"/>
-              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
-              <path d="M16 16h5v5"/>
-            </svg>
-            Actualizar app
-          </button>
           <button type="button" id="btn-install-historial" class="btn-install-app" hidden>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -303,6 +296,7 @@
       <span>Q Berries</span> · Paiján
       <button type="button" id="btn-install-app" class="footer-install" hidden>Instalar app</button>
     </footer>
+
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

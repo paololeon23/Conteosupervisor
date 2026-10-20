@@ -1,5 +1,5 @@
 import { guardarConteo, isConteoSuccess, isAuthError } from './api.js';
-import { isOnline, pingServer } from './network.js';
+import { isOnline, uploadTimeoutMs, updateNetBadge } from './network.js';
 import { todayStr, nowTimeStr, uid, toast } from './utils.js';
 import {
   getQueue,
@@ -8,8 +8,14 @@ import {
   saveHistorial,
   enqueue,
   removeFromQueue,
-  conteoKey
+  conteoKey,
+  pullQueueFromIDB
 } from './offline-queue.js';
+import {
+  pedirPermisoNotificaciones,
+  notificarPendientesSubidos,
+  programarSubidaEnFondo
+} from './sync-notify.js';
 
 let saveInFlight = false;
 let flushInFlight = false;
@@ -64,6 +70,7 @@ function guardarLocal(data) {
     historial.unshift({ ...entry, status: 'pending' });
   }
   saveHistorial(historial);
+  updateNetBadge();
 
   return entry;
 }
@@ -83,12 +90,31 @@ function marcarSincronizado(data) {
     historial.unshift({ ...data, ...patch });
   }
   saveHistorial(historial);
+  updateNetBadge();
+}
+
+function liberarColaParaReintento() {
+  const queue = getQueue();
+  if (!queue.length) return;
+  let changed = false;
+  const limpia = queue.map((q) => {
+    if (!q.nextTryAt) return q;
+    changed = true;
+    const { nextTryAt, ...rest } = q;
+    return rest;
+  });
+  if (changed) saveQueue(limpia);
+}
+
+function scheduleFlush() {
+  Promise.resolve()
+    .then(() => flushPendingQueue({ force: true }))
+    .catch(() => {});
 }
 
 /**
- * Guarda o actualiza un conteo: online → servidor; sin internet → celular.
- * @param {object} payload
- * @param {{ editar?: boolean }} [opts]
+ * Con internet: POST directo al servidor (sin toasts ni “1 pend.”).
+ * Sin internet: cola local.
  */
 export async function persistConteo(payload, opts = {}) {
   if (saveInFlight) return { saved: false };
@@ -101,21 +127,20 @@ export async function persistConteo(payload, opts = {}) {
     return { saved: false };
   }
 
+  pedirPermisoNotificaciones();
   saveInFlight = true;
 
   try {
-    const puedeEnviar = isOnline() && await pingServer();
-
-    if (!puedeEnviar) {
+    if (!isOnline()) {
       const entry = guardarLocal(data);
-      toast(editar
-        ? 'Actualizado en el celular — se envía al tener internet'
-        : 'Guardado en el celular — se envía al tener internet', 'info');
+      programarSubidaEnFondo();
       window.dispatchEvent(new CustomEvent('historial:update'));
       return { saved: true, synced: false, payload: entry, updated: editar };
     }
 
-    const resp = await guardarConteo(data);
+    // POST directo — sin mensajes
+    const resp = await guardarConteo(data, uploadTimeoutMs(), { maxAttempts: 1 });
+
     if (isAuthError(resp)) {
       toast('Token incorrecto — revise api-config.js', 'error');
       return { saved: false };
@@ -123,18 +148,20 @@ export async function persistConteo(payload, opts = {}) {
 
     if (isConteoSuccess(resp)) {
       marcarSincronizado(data);
-      toast((resp.updated || editar) ? 'Conteo actualizado en el servidor' : 'Conteo enviado', 'success');
       window.dispatchEvent(new CustomEvent('historial:update'));
       return { saved: true, synced: true, payload: data, updated: Boolean(resp.updated || editar) };
     }
 
+    // Solo si falló la red: cola silenciosa + reintento
     const entry = guardarLocal(data);
-    toast('No se pudo enviar — guardado en el celular', 'warn');
+    programarSubidaEnFondo();
+    scheduleFlush();
     window.dispatchEvent(new CustomEvent('historial:update'));
     return { saved: true, synced: false, payload: entry, updated: editar };
   } catch {
     const entry = guardarLocal(data);
-    toast('Sin conexión — guardado en el celular', 'warn');
+    programarSubidaEnFondo();
+    scheduleFlush();
     window.dispatchEvent(new CustomEvent('historial:update'));
     return { saved: true, synced: false, payload: entry, updated: editar };
   } finally {
@@ -142,53 +169,93 @@ export async function persistConteo(payload, opts = {}) {
   }
 }
 
-/**
- * Envía al servidor lo pendiente en cola (sin duplicar).
- */
-export async function flushPendingQueue() {
-  if (flushInFlight || flushBlocked) return;
+async function holdWakeLock() {
+  try {
+    return await navigator.wakeLock?.request('screen');
+  } catch {
+    return null;
+  }
+}
 
+function aplazarIntento(item) {
+  const intentos = (item.intentos || 0) + 1;
+  const espera = Math.min(45000, 2500 * intentos);
+  const queue = getQueue().map((q) => (
+    q.localId === item.localId
+      ? { ...q, intentos, nextTryAt: Date.now() + espera }
+      : q
+  ));
+  saveQueue(queue);
+}
+
+/**
+ * Sube pendientes en silencio (sin “Subiendo 1/1”).
+ */
+export async function flushPendingQueue(opts = {}) {
+  if (flushInFlight || flushBlocked) return;
+  if (!isOnline()) return;
+
+  await pullQueueFromIDB();
   dedupeQueue();
+  if (opts.force) liberarColaParaReintento();
+
   const queue = getQueue();
-  if (!queue.length || !isOnline()) return;
-  if (!await pingServer()) return;
+  if (!queue.length) {
+    updateNetBadge();
+    return;
+  }
 
   flushInFlight = true;
+  const subidos = [];
+  const wake = await holdWakeLock();
 
   try {
     const vistos = new Set();
+    const pendientes = [...getQueue()];
 
-    for (const item of [...getQueue()]) {
+    for (let i = 0; i < pendientes.length; i++) {
+      const item = pendientes[i];
       const key = conteoKey(item);
       if (vistos.has(key)) {
         removeFromQueue(item.localId);
         continue;
       }
       vistos.add(key);
-
+      if (!opts.force && item.nextTryAt && Date.now() < item.nextTryAt) continue;
       if (sendingIds.has(item.localId)) continue;
 
       sendingIds.add(item.localId);
       try {
-        const resp = await guardarConteo({ ...item, editar: true });
+        const resp = await guardarConteo({ ...item, editar: true }, uploadTimeoutMs(), { maxAttempts: 2 });
         if (isAuthError(resp)) {
           flushBlocked = true;
-          toast('Sync detenido — error de autorización', 'error');
           break;
         }
         if (isConteoSuccess(resp)) {
           marcarSincronizado(item);
+          subidos.push(item);
+          continue;
         }
+        const red = !resp || resp.code === 'TIMEOUT' || resp.code === 'NETWORK' || resp.code === 'PARSE_ERROR';
+        aplazarIntento(item);
+        if (red) break;
       } catch {
+        aplazarIntento(item);
         break;
       } finally {
         sendingIds.delete(item.localId);
       }
     }
   } finally {
+    try { await wake?.release(); } catch { /* ok */ }
     flushInFlight = false;
+    updateNetBadge();
     window.dispatchEvent(new CustomEvent('historial:update'));
   }
+
+  if (!subidos.length) return;
+  await notificarPendientesSubidos(subidos);
+  if (getQueue().length) programarSubidaEnFondo();
 }
 
 export function isFlushBlocked() {

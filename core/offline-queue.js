@@ -3,6 +3,7 @@ import { uid } from './utils.js';
 
 const IDB_NAME = 'qb_conteo_idb_v1';
 const IDB_STORE = 'kv';
+const REV_KEY = 'qb_queue_rev';
 
 function openIDB() {
   return new Promise((resolve, reject) => {
@@ -63,7 +64,28 @@ export function conteoKey(d) {
 }
 
 export function saveQueue(queue) {
+  const rev = Date.now();
   lsSet(STORAGE_KEYS.QUEUE, queue);
+  try { localStorage.setItem(REV_KEY, String(rev)); } catch { /* ok */ }
+  idbSet(REV_KEY, rev);
+}
+
+/** Si el service worker subió en segundo plano, trae esa cola al celular. */
+export async function pullQueueFromIDB() {
+  const idbRev = Number(await idbGet(REV_KEY) || 0);
+  const localRev = Number(localStorage.getItem(REV_KEY) || 0);
+  if (!idbRev || idbRev <= localRev) return false;
+
+  const queue = await idbGet(STORAGE_KEYS.QUEUE);
+  const historial = await idbGet(STORAGE_KEYS.HISTORIAL);
+  if (Array.isArray(queue)) {
+    try { localStorage.setItem(STORAGE_KEYS.QUEUE, JSON.stringify(queue)); } catch { /* ok */ }
+  }
+  if (Array.isArray(historial)) {
+    try { localStorage.setItem(STORAGE_KEYS.HISTORIAL, JSON.stringify(historial)); } catch { /* ok */ }
+  }
+  try { localStorage.setItem(REV_KEY, String(idbRev)); } catch { /* ok */ }
+  return true;
 }
 
 export function enqueue(item) {
