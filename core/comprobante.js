@@ -117,20 +117,16 @@ function buildComprobanteHtml(data, mode) {
       </tbody>
     </table>
 
-    <table class="comp-table comp-table--resumen" aria-label="Almuerzos permisos faltas">
+    <table class="comp-table comp-table--resumen" aria-label="Permisos y faltantes">
       <tbody>
         <tr>
-          <td class="comp-res-cell comp-res--alm">
-            <span class="comp-res-cell__lbl">ALM.</span>
-            <strong>${qtyCell(data.almuerzos) || '—'}</strong>
-          </td>
           <td class="comp-res-cell comp-res--perm">
-            <span class="comp-res-cell__lbl">PERM.</span>
-            <strong>${qtyCell(data.permisos) || '—'}</strong>
+            <span class="comp-res-cell__lbl">CON PERMISO</span>
+            <strong>${qtyCell(data.permisos) || '0'}</strong>
           </td>
           <td class="comp-res-cell comp-res--falt">
-            <span class="comp-res-cell__lbl">FALT.</span>
-            <strong>${qtyCell(data.faltas) || '—'}</strong>
+            <span class="comp-res-cell__lbl">FALTANTES</span>
+            <strong>${qtyCell(data.faltas) || '0'}</strong>
           </td>
         </tr>
       </tbody>

@@ -11,7 +11,7 @@ export const STORAGE_KEYS = {
   DASHBOARD: 'qb_conteo_dashboard_v1'
 };
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '3.6.88';
 export const TZ = 'America/Lima';
 export const HISTORIAL_TTL_MS = 48 * 60 * 60 * 1000;
 

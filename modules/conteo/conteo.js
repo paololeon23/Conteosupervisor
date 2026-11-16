@@ -12,6 +12,11 @@ import {
 } from '../../core/supervisor-select.js';
 import { preloadLicapa } from '../../core/licapa-data.js';
 import { limpiarDni, extraerDni, buscarPorDni, loadSupervisoresCosecha } from '../../core/supervisores-catalog.js';
+import {
+  loadTrabajadores,
+  buscarTrabajadorPorDni,
+  addTrabajadorLocal
+} from '../../core/trabajadores-catalog.js';
 import { initDatePicker, setFecha, getFecha, syncFechaHoy } from '../../core/date-picker.js';
 import { initComprobante, openComprobantePreview } from '../../core/comprobante.js';
 import { addCustomZona, validarZona } from '../../core/zonas-catalog.js';
@@ -26,6 +31,10 @@ import {
 
 /** @type {{zona:string,cantidad:number}[]} */
 let zonasAgregadas = [];
+/** @type {{dni:string,nombre:string}[]} */
+let listaPermisos = [];
+/** @type {{dni:string,nombre:string}[]} */
+let listaFaltas = [];
 let draftPaused = false;
 let editMode = false;
 /** Total de personal al cargar edición (para avisar si cambió). */
@@ -134,7 +143,127 @@ function persistirBorrador() {
     fecha: $('#fecha')?.value || '',
     roles: ROLES.reduce((o, r) => ({ ...o, [r.key]: num(`role-${r.key}`) }), {}),
     zonas: zonasAgregadas,
+    listaPermisos,
+    listaFaltas,
+    permisos: listaPermisos.length,
+    faltas: listaFaltas.length,
   });
+}
+
+function normalizarPersonaLista(arr) {
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set();
+  return arr.map((p) => ({
+    dni: limpiarDni(p?.dni),
+    nombre: String(p?.nombre || '').trim().toLocaleUpperCase('es-PE')
+  })).filter((p) => {
+    if (p.dni.length < 8 || seen.has(p.dni)) return false;
+    seen.add(p.dni);
+    return true;
+  });
+}
+
+function showAsistenciaMsg(text, type = 'info') {
+  const el = $('#asistencia-msg');
+  if (!el) return;
+  el.hidden = !text;
+  el.textContent = text || '';
+  el.className = `zona-nueva__msg zona-nueva__msg--${type}`;
+}
+
+function renderAsistenciaListas() {
+  const render = (id, list, tipo) => {
+    const ul = document.getElementById(id);
+    if (!ul) return;
+    if (!list.length) {
+      ul.innerHTML = '';
+      return;
+    }
+    ul.innerHTML = list.map((p, i) => `
+      <li>
+        <strong>${p.dni}</strong>
+        <span>${p.nombre || '—'}</span>
+        <button type="button" data-tipo="${tipo}" data-idx="${i}" aria-label="Quitar">×</button>
+      </li>
+    `).join('');
+  };
+  render('lista-permisos', listaPermisos, 'PERMISO');
+  render('lista-faltas', listaFaltas, 'FALTA');
+
+  const cPerm = document.getElementById('count-permisos');
+  const cFalt = document.getElementById('count-faltas');
+  if (cPerm) cPerm.textContent = String(listaPermisos.length);
+  if (cFalt) cFalt.textContent = String(listaFaltas.length);
+}
+
+function quitarPersonaAsistencia(tipo, idx) {
+  if (tipo === 'PERMISO') listaPermisos = listaPermisos.filter((_, i) => i !== idx);
+  else listaFaltas = listaFaltas.filter((_, i) => i !== idx);
+  renderAsistenciaListas();
+  saveDraftDebounced();
+}
+
+function syncAltaVisibilidad(tipo) {
+  const dniId = tipo === 'PERMISO' ? 'dni-permiso' : 'dni-falta';
+  const altaId = tipo === 'PERMISO' ? 'alta-permiso' : 'alta-falta';
+  const nomId = tipo === 'PERMISO' ? 'nombre-permiso' : 'nombre-falta';
+  const dni = limpiarDni(document.getElementById(dniId)?.value);
+  const alta = document.getElementById(altaId);
+  const found = dni.length >= 8 ? buscarTrabajadorPorDni(dni) : null;
+  if (!alta) return;
+  if (dni.length >= 8 && !found) {
+    alta.hidden = false;
+  } else {
+    alta.hidden = true;
+    const nom = document.getElementById(nomId);
+    if (nom) nom.value = '';
+  }
+}
+
+function agregarPersonaAsistencia(tipo) {
+  const dniId = tipo === 'PERMISO' ? 'dni-permiso' : 'dni-falta';
+  const nomId = tipo === 'PERMISO' ? 'nombre-permiso' : 'nombre-falta';
+  const input = document.getElementById(dniId);
+  const dni = limpiarDni(input?.value);
+  if (!dni) {
+    showAsistenciaMsg('');
+    return;
+  }
+  if (dni.length < 8) {
+    showAsistenciaMsg('Ingrese un DNI de 8 dígitos', 'error');
+    return;
+  }
+
+  const ya = [...listaPermisos, ...listaFaltas].some((p) => p.dni === dni);
+  if (ya) {
+    showAsistenciaMsg('Ese DNI ya está en la lista', 'warn');
+    return;
+  }
+
+  let found = buscarTrabajadorPorDni(dni);
+  let nombre = found?.nombre || '';
+  if (!nombre) {
+    nombre = String(document.getElementById(nomId)?.value || '').trim().toLocaleUpperCase('es-PE');
+    if (!nombre) {
+      syncAltaVisibilidad(tipo);
+      showAsistenciaMsg('DNI no está en padrón — escriba el nombre', 'warn');
+      document.getElementById(nomId)?.focus();
+      return;
+    }
+    addTrabajadorLocal(dni, nombre);
+  }
+
+  const row = { dni, nombre };
+  if (tipo === 'PERMISO') listaPermisos = [...listaPermisos, row];
+  else listaFaltas = [...listaFaltas, row];
+
+  if (input) input.value = '';
+  const nomEl = document.getElementById(nomId);
+  if (nomEl) nomEl.value = '';
+  syncAltaVisibilidad(tipo);
+  showAsistenciaMsg('');
+  renderAsistenciaListas();
+  saveDraftDebounced();
 }
 
 function restaurarBorrador() {
@@ -164,6 +293,10 @@ function restaurarBorrador() {
       cantidad: Math.max(0, Math.round(Number(z.cantidad)) || 0)
     })).filter((z) => z.zona);
   }
+
+  listaPermisos = normalizarPersonaLista(b.listaPermisos);
+  listaFaltas = normalizarPersonaLista(b.listaFaltas);
+  renderAsistenciaListas();
 
   renderZonasList();
   updateTotals();
@@ -310,8 +443,10 @@ function getPayload(extra = {}) {
     distribucionZonas,
     totalZonas,
     almuerzos: 0,
-    permisos: 0,
-    faltas: 0,
+    listaPermisos: listaPermisos.map((p) => ({ ...p })),
+    listaFaltas: listaFaltas.map((p) => ({ ...p })),
+    permisos: listaPermisos.length,
+    faltas: listaFaltas.length,
     editar: editMode || isModoEditar(),
     ...extra
   };
@@ -329,8 +464,9 @@ export async function initConteo() {
   updateTotals();
 
   await preloadLicapa();
-  await loadSupervisoresCosecha();
+  await Promise.all([loadSupervisoresCosecha(), loadTrabajadores()]);
   initSupervisorSelect(onSupervisorChange);
+  renderAsistenciaListas();
 
   restaurarBorrador();
   setFecha(todayStr(), { silent: true });
@@ -416,6 +552,10 @@ function rellenarFormularioDesde(data, { toastMsg = '' } = {}) {
     })).filter((z) => z.zona);
   }
 
+  listaPermisos = normalizarPersonaLista(data.listaPermisos);
+  listaFaltas = normalizarPersonaLista(data.listaFaltas);
+  renderAsistenciaListas();
+
   // Fecha principal = siempre hoy Lima (nunca se “pega” a un día anterior)
   setFecha(todayStr(), { silent: true });
 
@@ -473,6 +613,41 @@ function bindEvents() {
   $('#zona-nueva-input')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); onAgregarZonaManual(); }
   });
+
+  const bindAsistencia = (tipo, dniId, nomId, btnId) => {
+    const dniEl = document.getElementById(dniId);
+    const nomEl = document.getElementById(nomId);
+    const btn = document.getElementById(btnId);
+    dniEl?.addEventListener('input', () => {
+      dniEl.value = limpiarDni(dniEl.value);
+      syncAltaVisibilidad(tipo);
+      showAsistenciaMsg('');
+    });
+    dniEl?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); agregarPersonaAsistencia(tipo); }
+    });
+    nomEl?.addEventListener('input', () => {
+      nomEl.value = String(nomEl.value || '').toLocaleUpperCase('es-PE');
+    });
+    nomEl?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); agregarPersonaAsistencia(tipo); }
+    });
+    btn?.addEventListener('click', () => agregarPersonaAsistencia(tipo));
+  };
+  bindAsistencia('PERMISO', 'dni-permiso', 'nombre-permiso', 'btn-add-permiso');
+  bindAsistencia('FALTA', 'dni-falta', 'nombre-falta', 'btn-add-falta');
+
+  document.getElementById('lista-permisos')?.addEventListener('click', (e) => {
+    const btn = e.target?.closest?.('button[data-idx]');
+    if (!btn) return;
+    quitarPersonaAsistencia('PERMISO', Number(btn.dataset.idx));
+  });
+  document.getElementById('lista-faltas')?.addEventListener('click', (e) => {
+    const btn = e.target?.closest?.('button[data-idx]');
+    if (!btn) return;
+    quitarPersonaAsistencia('FALTA', Number(btn.dataset.idx));
+  });
+
   $('#form-conteo')?.addEventListener('submit', (e) => {
     e.preventDefault();
     onVerResumen();
@@ -543,11 +718,19 @@ function resetForm() {
   desbloquearDniInput();
   resetSupervisor();
 
-  document.querySelectorAll('#roles-grid .num-input, .resumen-grid .num-input').forEach((el) => {
+  document.querySelectorAll('#roles-grid .num-input, .resumen-grid .num-input, .asistencia-dni, .asistencia-alta input').forEach((el) => {
     el.value = '';
   });
 
   zonasAgregadas = [];
+  listaPermisos = [];
+  listaFaltas = [];
+  renderAsistenciaListas();
+  showAsistenciaMsg('');
+  ['alta-permiso', 'alta-falta'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  });
 
   const zonaInput = $('#zona-nueva-input');
   if (zonaInput) zonaInput.value = '';

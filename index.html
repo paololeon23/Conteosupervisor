@@ -164,6 +164,46 @@
             <strong id="total-zonas">0</strong>
           </div>
         </div>
+
+        <div class="card card--asistencia sheet">
+          <div class="section-head">
+            <h2 class="section-title">Hoy en su grupo</h2>
+            <p class="section-sub">Ingrese el DNI de cada persona. En el comprobante sale la cantidad.</p>
+          </div>
+
+          <div class="asistencia-cols">
+            <div class="asistencia-col" data-tipo="PERMISO">
+              <div class="asistencia-col__head">
+                <h3>Con permiso</h3>
+                <strong id="count-permisos" class="asistencia-col__count">0</strong>
+              </div>
+              <div class="asistencia-add">
+                <input type="text" id="dni-permiso" class="asistencia-dni" inputmode="numeric" maxlength="8" placeholder="DNI" autocomplete="off" aria-label="DNI con permiso">
+                <button type="button" id="btn-add-permiso" class="btn btn--zona-nueva">Agregar</button>
+              </div>
+              <div id="alta-permiso" class="asistencia-alta" hidden>
+                <input type="text" id="nombre-permiso" maxlength="80" placeholder="Nombre (no está en padrón)" autocomplete="off" autocapitalize="characters">
+              </div>
+              <ul id="lista-permisos" class="asistencia-list" aria-label="Personas con permiso"></ul>
+            </div>
+
+            <div class="asistencia-col" data-tipo="FALTA">
+              <div class="asistencia-col__head">
+                <h3>Faltantes</h3>
+                <strong id="count-faltas" class="asistencia-col__count">0</strong>
+              </div>
+              <div class="asistencia-add">
+                <input type="text" id="dni-falta" class="asistencia-dni" inputmode="numeric" maxlength="8" placeholder="DNI" autocomplete="off" aria-label="DNI faltante">
+                <button type="button" id="btn-add-falta" class="btn btn--zona-nueva">Agregar</button>
+              </div>
+              <div id="alta-falta" class="asistencia-alta" hidden>
+                <input type="text" id="nombre-falta" maxlength="80" placeholder="Nombre (no está en padrón)" autocomplete="off" autocapitalize="characters">
+              </div>
+              <ul id="lista-faltas" class="asistencia-list" aria-label="Personas faltantes"></ul>
+            </div>
+          </div>
+          <p id="asistencia-msg" class="zona-nueva__msg" hidden></p>
+        </div>
         </div>
 
         <div class="form-actions">

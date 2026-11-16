@@ -1,4 +1,4 @@
-const CACHE = 'qb-conteo-v3.6.81';
+const CACHE = 'qb-conteo-v3.6.88';
 
 const ASSETS = [
   '/index.html',
@@ -21,6 +21,7 @@ const ASSETS = [
   '/core/zona-select.js',
   '/core/supervisores-catalog.js',
   '/core/supervisor-select.js',
+  '/core/trabajadores-catalog.js',
   '/core/comprobante.js',
   '/core/save-conteo.js',
   '/core/sync-notify.js',
@@ -33,6 +34,7 @@ const ASSETS = [
   '/core/fab.js',
   '/data/lotes-licapa.json',
   '/data/supervisores-cosecha.json',
+  '/data/trabajadores.json',
   '/assets/favicon.svg',
   '/assets/icon-192.png',
   '/assets/icon-512.png',
@@ -237,16 +239,19 @@ async function flushDesdeSegundoPlano() {
   const queue = await idbGet(QUEUE_KEY);
   if (!Array.isArray(queue) || !queue.length) return;
   const subidos = [];
+  const fallidos = [];
   for (const item of queue) {
     const resp = await postGuardar({ ...item, editar: true });
-    if (!resp || resp.ok !== true) break;
-    subidos.push(item);
+    if (resp && resp.ok === true) subidos.push(item);
+    else fallidos.push(item);
   }
   if (!subidos.length) return;
 
   const done = new Set(subidos.map((item) => item.localId));
   const fresh = await idbGet(QUEUE_KEY);
-  const siguiente = (Array.isArray(fresh) ? fresh : queue).filter((item) => !done.has(item.localId));
+  const base = Array.isArray(fresh) ? fresh : queue;
+  // Conserva solo los que no subieron (reintento luego)
+  const siguiente = base.filter((item) => !done.has(item.localId));
   await idbPut(QUEUE_KEY, siguiente);
 
   const historial = await idbGet(HIST_KEY);
@@ -272,6 +277,13 @@ async function flushDesdeSegundoPlano() {
     renotify: true,
     data: { tab: 'historial' }
   });
+
+  // Si aún hay fallidos, re-registrar sync para otro intento
+  if (fallidos.length || siguiente.length) {
+    try {
+      await self.registration.sync.register('qb-flush-queue');
+    } catch (e) { /* ok */ }
+  }
 }
 
 self.addEventListener('sync', (event) => {

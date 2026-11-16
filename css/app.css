@@ -1554,6 +1554,200 @@ body.modal-open .app {
   height: 40px;
 }
 
+/* Permisos / Faltantes — mismo lenguaje visual que zonas */
+.card--asistencia.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 16px 14px;
+}
+
+.card--asistencia .section-head {
+  margin-bottom: 0;
+}
+
+.asistencia-cols {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.asistencia-col {
+  margin: 0;
+  padding: 12px 12px 10px;
+  border-radius: 14px;
+  background: #f7faf8;
+  border: 1px solid #e6eee8;
+}
+
+.asistencia-col__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.asistencia-col__head h3 {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #1f6b45;
+}
+
+.asistencia-col__count {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #1f6b45;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.asistencia-col[data-tipo="FALTA"] .asistencia-col__count {
+  background: #c62828;
+}
+
+.asistencia-add {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  margin-bottom: 0;
+}
+
+.asistencia-dni,
+.asistencia-alta input {
+  width: 100%;
+  font-family: var(--font);
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 12px 14px;
+  min-height: 46px;
+  border: 1px solid #d7e0da;
+  border-radius: 12px;
+  background: #fff;
+  color: #1a2330;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.asistencia-dni {
+  flex: 1;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+.asistencia-dni::placeholder,
+.asistencia-alta input::placeholder {
+  color: #9aa39c;
+  font-weight: 600;
+}
+
+.asistencia-dni:focus,
+.asistencia-alta input:focus {
+  border-color: #b7c9bc;
+  outline: 2px solid rgba(31, 107, 69, 0.12);
+  outline-offset: 0;
+}
+
+.asistencia-add .btn--zona-nueva {
+  min-width: 96px;
+}
+
+.asistencia-alta {
+  margin-top: 8px;
+}
+
+.asistencia-alta input {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.asistencia-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.asistencia-list:empty {
+  display: none;
+}
+
+.asistencia-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e6eee8;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  color: #1a2330;
+}
+
+.asistencia-list li strong {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #145c32;
+  flex-shrink: 0;
+}
+
+.asistencia-list li span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #3d4a42;
+}
+
+.asistencia-list li button {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: #fdecec;
+  color: #c62828;
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.asistencia-list li button:active {
+  background: #f8d0d0;
+}
+
+.card--asistencia #asistencia-msg {
+  margin: 0;
+}
+
+@media (min-width: 560px) {
+  .asistencia-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+
 /* Resumen del día — tiles centrados */
 .resumen-grid {
   display: grid;
@@ -2710,6 +2904,10 @@ body.modal-open .form-actions {
     padding: 20px 22px;
     display: flex;
     flex-direction: column;
+  }
+
+  .card--asistencia {
+    grid-column: 1 / -1;
   }
 
   .card--personal .total-box,
@@ -5434,6 +5632,10 @@ html {
     flex-direction: column;
   }
 
+  .card--asistencia {
+    grid-column: 1 / -1;
+  }
+
   .card--personal .total-box,
   .card--zonas .total-box {
     margin-top: auto;
@@ -5496,6 +5698,7 @@ html {
   #form-conteo .card--header,
   .card--personal,
   .card--zonas,
+  .card--asistencia,
   .card--resumen-dia {
     width: 100%;
   }
@@ -5513,6 +5716,10 @@ html {
     display: flex;
     flex-direction: column;
     min-height: 100%;
+  }
+
+  .card--asistencia {
+    grid-column: 1 / -1;
   }
 
   /* Ver resumen: fijo abajo siempre (también en desktop) */
@@ -5768,7 +5975,9 @@ body::before {
 #supervisor-alta-nombre,
 #zona-nueva-input,
 #form-conteo .role-input,
-#form-conteo .num-input {
+#form-conteo .num-input,
+#form-conteo .asistencia-dni,
+#form-conteo .asistencia-alta input {
   background: #fff;
   border: 1px solid #d7e0da;
   border-radius: 14px;
@@ -5780,14 +5989,18 @@ body::before {
 #supervisor-alta-nombre:focus,
 #zona-nueva-input:focus,
 #form-conteo .role-input:focus,
-#form-conteo .num-input:focus {
+#form-conteo .num-input:focus,
+#form-conteo .asistencia-dni:focus,
+#form-conteo .asistencia-alta input:focus {
   border-color: #b7c9bc;
   outline: 2px solid rgba(31, 107, 69, 0.12);
   outline-offset: 0;
 }
 
 .field-input::placeholder,
-#supervisor-dni::placeholder {
+#supervisor-dni::placeholder,
+#form-conteo .asistencia-dni::placeholder,
+#form-conteo .asistencia-alta input::placeholder {
   color: #9aa39c;
 }
 
@@ -6303,9 +6516,14 @@ body[data-page="conteo"] .fab-wrap {
   }
 
   .card--personal.sheet,
-  .card--zonas.sheet {
+  .card--zonas.sheet,
+  .card--asistencia.sheet {
     min-height: 100%;
     padding: 18px 18px 16px;
+  }
+
+  .card--asistencia {
+    grid-column: 1 / -1;
   }
 
   .card--personal .num-grid {

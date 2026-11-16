@@ -22,6 +22,11 @@ let flushInFlight = false;
 let flushBlocked = false;
 const sendingIds = new Set();
 
+/** Bomba de reintentos en segundo plano hasta vaciar la cola */
+let pumpTimer = 0;
+let pumpRound = 0;
+const PUMP_DELAYS_MS = [600, 1200, 2500, 4000, 7000, 10000, 15000];
+
 function prepareData(payload) {
   return {
     ...payload,
@@ -58,7 +63,7 @@ export function dedupeQueue() {
   return limpia;
 }
 
-function guardarLocal(data) {
+function guardarLocal(data, { silentBadge = false } = {}) {
   const entry = enqueue(data);
 
   const historial = getHistorial();
@@ -70,7 +75,7 @@ function guardarLocal(data) {
     historial.unshift({ ...entry, status: 'pending' });
   }
   saveHistorial(historial);
-  updateNetBadge();
+  if (!silentBadge) updateNetBadge();
 
   return entry;
 }
@@ -106,15 +111,48 @@ function liberarColaParaReintento() {
   if (changed) saveQueue(limpia);
 }
 
-function scheduleFlush() {
+/**
+ * Reintenta en segundo plano hasta que no quede nada pendiente.
+ * No bloquea la UI.
+ */
+export function startBackgroundPump() {
+  programarSubidaEnFondo().catch(() => {});
+  if (pumpTimer) {
+    clearTimeout(pumpTimer);
+    pumpTimer = 0;
+  }
+  pumpRound = 0;
+
+  const tick = async () => {
+    pumpTimer = 0;
+    if (!isOnline() || flushBlocked) return;
+    try {
+      await flushPendingQueue({ force: true });
+    } catch { /* ok */ }
+
+    if (!getQueue().length) {
+      pumpRound = 0;
+      updateNetBadge();
+      return;
+    }
+
+    const delay = PUMP_DELAYS_MS[Math.min(pumpRound, PUMP_DELAYS_MS.length - 1)];
+    pumpRound += 1;
+    programarSubidaEnFondo().catch(() => {});
+    pumpTimer = window.setTimeout(() => {
+      tick().catch(() => {});
+    }, delay);
+  };
+
+  // Primer intento al toque (microtask)
   Promise.resolve()
-    .then(() => flushPendingQueue({ force: true }))
+    .then(() => tick())
     .catch(() => {});
 }
 
 /**
- * Con internet: POST directo al servidor (sin toasts ni “1 pend.”).
- * Sin internet: cola local.
+ * Guarda ya en el celular y sube en línea (o en segundo plano si falla/sin red).
+ * Así no se pierde el conteo y la cola se vacía sola.
  */
 export async function persistConteo(payload, opts = {}) {
   if (saveInFlight) return { saved: false };
@@ -131,38 +169,50 @@ export async function persistConteo(payload, opts = {}) {
   saveInFlight = true;
 
   try {
+    // 1) Siempre local primero (no se pierde si corta la red)
+    const entry = guardarLocal(data, { silentBadge: isOnline() });
+    programarSubidaEnFondo().catch(() => {});
+    window.dispatchEvent(new CustomEvent('historial:update'));
+
     if (!isOnline()) {
-      const entry = guardarLocal(data);
-      programarSubidaEnFondo();
-      window.dispatchEvent(new CustomEvent('historial:update'));
+      updateNetBadge();
       return { saved: true, synced: false, payload: entry, updated: editar };
     }
 
-    // POST directo — sin mensajes
-    const resp = await guardarConteo(data, uploadTimeoutMs(), { maxAttempts: 1 });
+    // 2) En línea: un intento ya; si ok → 0 pend.
+    const resp = await guardarConteo(
+      { ...entry, editar: true },
+      uploadTimeoutMs(),
+      { maxAttempts: 1 }
+    );
 
     if (isAuthError(resp)) {
       toast('Token incorrecto — revise api-config.js', 'error');
+      updateNetBadge();
       return { saved: false };
     }
 
     if (isConteoSuccess(resp)) {
-      marcarSincronizado(data);
+      marcarSincronizado(entry);
       window.dispatchEvent(new CustomEvent('historial:update'));
-      return { saved: true, synced: true, payload: data, updated: Boolean(resp.updated || editar) };
+      return {
+        saved: true,
+        synced: true,
+        payload: entry,
+        updated: Boolean(resp.updated || editar)
+      };
     }
 
-    // Solo si falló la red: cola silenciosa + reintento
-    const entry = guardarLocal(data);
-    programarSubidaEnFondo();
-    scheduleFlush();
+    // 3) Falló la red: queda en cola y se bombea en segundo plano
+    updateNetBadge();
+    startBackgroundPump();
     window.dispatchEvent(new CustomEvent('historial:update'));
     return { saved: true, synced: false, payload: entry, updated: editar };
   } catch {
-    const entry = guardarLocal(data);
-    programarSubidaEnFondo();
-    scheduleFlush();
+    updateNetBadge();
+    startBackgroundPump();
     window.dispatchEvent(new CustomEvent('historial:update'));
+    const entry = getQueue().find((q) => conteoKey(q) === conteoKey(data)) || data;
     return { saved: true, synced: false, payload: entry, updated: editar };
   } finally {
     saveInFlight = false;
@@ -179,8 +229,7 @@ async function holdWakeLock() {
 
 function aplazarIntento(item) {
   const intentos = (item.intentos || 0) + 1;
-  // Reintentos cortos en 3G/H+ para no dejar pendientes pegados
-  const espera = Math.min(12000, 1500 * intentos);
+  const espera = Math.min(10000, 1000 * intentos);
   const queue = getQueue().map((q) => (
     q.localId === item.localId
       ? { ...q, intentos, nextTryAt: Date.now() + espera }
@@ -227,7 +276,11 @@ export async function flushPendingQueue(opts = {}) {
 
       sendingIds.add(item.localId);
       try {
-        const resp = await guardarConteo({ ...item, editar: true }, uploadTimeoutMs(), { maxAttempts: 3 });
+        const resp = await guardarConteo(
+          { ...item, editar: true },
+          uploadTimeoutMs(),
+          { maxAttempts: opts.force ? 3 : 2 }
+        );
         if (isAuthError(resp)) {
           flushBlocked = true;
           break;
@@ -237,9 +290,9 @@ export async function flushPendingQueue(opts = {}) {
           subidos.push(item);
           continue;
         }
-        const red = !resp || resp.code === 'TIMEOUT' || resp.code === 'NETWORK' || resp.code === 'PARSE_ERROR';
         aplazarIntento(item);
-        // En red lenta: seguir con el siguiente en breve (no cortar toda la cola)
+        // Con force seguimos con el resto; sin force paramos si es red
+        const red = !resp || resp.code === 'TIMEOUT' || resp.code === 'NETWORK' || resp.code === 'PARSE_ERROR';
         if (red && !opts.force) break;
       } catch {
         aplazarIntento(item);
@@ -256,12 +309,13 @@ export async function flushPendingQueue(opts = {}) {
   }
 
   if (subidos.length) await notificarPendientesSubidos(subidos);
+
   if (getQueue().length) {
-    programarSubidaEnFondo();
-    // Reintento en segundo plano pronto
-    window.setTimeout(() => {
-      flushPendingQueue({ force: true }).catch(() => {});
-    }, 4000);
+    // Seguir bombeando en fondo
+    if (!pumpTimer) startBackgroundPump();
+    else programarSubidaEnFondo().catch(() => {});
+  } else {
+    pumpRound = 0;
   }
 }
 

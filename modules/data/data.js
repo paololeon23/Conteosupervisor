@@ -805,8 +805,8 @@ function showModalFor(kind) {
       <div class="dd-stat dd-stat--grand"><span>Total junto</span><strong>${rolesTotal}</strong></div>
     </div>
     <div class="dd-mini">
-      <span>Permisos ${t.permisos || 0}</span>
-      <span>Faltas ${t.faltas || 0}</span>
+      <span>Con permiso ${t.permisos || 0}</span>
+      <span>Faltantes ${t.faltas || 0}</span>
       <span>Conteos ${t.conteos || 0}</span>
     </div>
   `);

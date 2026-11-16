@@ -11,12 +11,33 @@
 
     var TZ = 'America/Lima';
     var HOJA = 'Hoja 1';
+    var HOJA_PF = 'PermisosFaltas';
+
+    // Una fila por persona (permiso/falta) para mapear: día + supervisor + nombre completo
+    var COLUMNAS_PF = [
+      'Fecha', 'Dia', 'Hora Registro', 'Licapa',
+      'DNI Supervisor', 'Supervisor',
+      'Tipo', 'DNI Persona', 'Apellidos y Nombres'
+    ];
+
+    var COL_PF = {
+      FECHA: 0,
+      DIA: 1,
+      HORA: 2,
+      LICAPA: 3,
+      DNI_SUP: 4,
+      SUPERVISOR: 5,
+      TIPO: 6,
+      DNI_PER: 7,
+      NOMBRE: 8
+    };
 
     var COLUMNAS = [
       'Hora Registro',
       'Licapa', 'DNI', 'Supervisor', 'Fecha',
       'Tipo', 'Zona', 'Cantidad',
-      'Cosechadores', 'Escaner', 'Calidad', 'Cant Supervisor', 'Total Personal'
+      'Cosechadores', 'Escaner', 'Calidad', 'Cant Supervisor', 'Total Personal',
+      'Permisos', 'Faltas'
     ];
 
     // Índices de columna (0-based)
@@ -33,7 +54,9 @@
       ESCANER: 9,
       CALIDAD: 10,
       CANT_SUP: 11,
-      TOTAL: 12
+      TOTAL: 12,
+      PERMISOS: 13,
+      FALTAS: 14
     };
 
     function doGet(e) {
@@ -151,19 +174,31 @@
           if (!nombre || cant <= 0) continue;
           filas.push(fila_(base, 'ZONA', nombre, cant, {
             cosechadores: '', escaner: '', calidad: '', supervisorCount: '',
-            totalPersonal: ''
+            totalPersonal: '', permisos: '', faltas: ''
           }));
         }
+
+        var listaPerm = normalizarListaPersonas_(d.listaPermisos);
+        var listaFal = normalizarListaPersonas_(d.listaFaltas);
+        var nPerm = listaPerm.length || num_(d.permisos);
+        var nFal = listaFal.length || num_(d.faltas);
 
         filas.push(fila_(base, 'PERSONAL', '', '', {
           cosechadores: cosechadores,
           escaner: escaner,
           calidad: calidad,
           supervisorCount: supervisorCount,
-          totalPersonal: totalPersonal
+          totalPersonal: totalPersonal,
+          permisos: nPerm,
+          faltas: nFal
         }));
 
         var escrito = escribirFilasNuevas_(hoja, filas);
+        try {
+          guardarPermisosFaltas_(base, listaPerm, listaFal);
+        } catch (errPfSave) {
+          // No tumbar el conteo si falla la hoja de detalle
+        }
 
         if (localId) marcarGuardado_(localId);
         invalidarDashboardCache_();
@@ -234,6 +269,9 @@
 
       var licapaVal = String(personal[COL.LICAPA] || '').trim();
       var nombreSup = String(personal[COL.SUPERVISOR] || '').trim();
+      var listasPf = leerPermisosFaltas_(dni, fecha);
+      var nPerm = listasPf.permisos.length || num_(personal[COL.PERMISOS]);
+      var nFal = listasPf.faltas.length || num_(personal[COL.FALTAS]);
 
       return {
         ok: true,
@@ -258,8 +296,10 @@
           calidad: num_(personal[COL.CALIDAD]),
           supervisorCount: num_(personal[COL.CANT_SUP]),
           almuerzos: 0,
-          permisos: 0,
-          faltas: 0,
+          permisos: nPerm,
+          faltas: nFal,
+          listaPermisos: listasPf.permisos,
+          listaFaltas: listasPf.faltas,
           distribucionZonas: zonas,
           horaRegistro: horaTexto_(personal[COL.HORA])
         }
@@ -426,6 +466,8 @@
           var tot = num_(row[COL.TOTAL]) || (cos + esc + cal + supC);
           var grupo = String(row[COL.LICAPA] || '').trim();
 
+          var perm = num_(row[COL.PERMISOS]);
+          var falt = num_(row[COL.FALTAS]);
           if (!bySup[key]) {
             bySup[key] = {
               supervisor: label,
@@ -434,6 +476,8 @@
               calidad: 0,
               supervisorCount: 0,
               total: 0,
+              permisos: 0,
+              faltas: 0,
               conteos: 0,
               grupos: {},
               horaRegistro: '',
@@ -450,6 +494,8 @@
           s.calidad += cal;
           s.supervisorCount += supC;
           s.total += tot;
+          s.permisos += perm;
+          s.faltas += falt;
           s.conteos += 1;
           if (grupo) s.grupos[grupo] = true;
 
@@ -458,6 +504,8 @@
           totales.calidad += cal;
           totales.supervisorCount += supC;
           totales.total += tot;
+          totales.permisos += perm;
+          totales.faltas += falt;
           conteos += 1;
         } else {
           var zona = String(row[COL.ZONA] || '').trim().toUpperCase();
@@ -478,6 +526,8 @@
                 calidad: 0,
                 supervisorCount: 0,
                 total: 0,
+                permisos: 0,
+                faltas: 0,
                 conteos: 0,
                 grupos: {},
                 horaRegistro: '',
@@ -504,6 +554,8 @@
           calidad: item.calidad,
           supervisorCount: item.supervisorCount,
           total: item.total,
+          permisos: item.permisos || 0,
+          faltas: item.faltas || 0,
           conteos: item.conteos,
           grupos: nGrupos,
           horaRegistro: item.horaRegistro || '',
@@ -621,7 +673,7 @@
         conteos: 0
       };
     }
-    // almuerzos/permisos/faltas quedan en 0 (compat API; ya no hay columnas)
+    // almuerzos queda en 0 (compat API); permisos/faltas salen de columnas N–O
 
     /** Fecha de la celda: primero lo que se ve en el Sheet, luego el valor crudo */
     function fechaCelda_(valor, display) {
@@ -700,7 +752,9 @@
         extra.escaner === '' ? '' : num_(extra.escaner),
         extra.calidad === '' ? '' : num_(extra.calidad),
         extra.supervisorCount === '' ? '' : num_(extra.supervisorCount),
-        extra.totalPersonal === '' ? '' : num_(extra.totalPersonal)
+        extra.totalPersonal === '' ? '' : num_(extra.totalPersonal),
+        extra.permisos === '' ? '' : num_(extra.permisos),
+        extra.faltas === '' ? '' : num_(extra.faltas)
       ];
     }
 
@@ -720,15 +774,16 @@
         mat.push(row);
       }
 
+      // getRange(row, column, numRows, numColumns) — 3.er arg = cantidad de filas
       var start = Math.max(hoja.getLastRow() + 1, 2);
       try {
-        hoja.getRange(start, 1, start + n - 1, cols).setValues(mat);
+        hoja.getRange(start, 1, n, cols).setValues(mat);
       } catch (errSet) {
         // Fallback seguro fila a fila
         for (var k = 0; k < mat.length; k++) {
           hoja.appendRow(mat[k]);
         }
-        start = hoja.getLastRow() - n + 1;
+        start = Math.max(hoja.getLastRow() - n + 1, 2);
       }
       return { desde: start, hasta: start + n - 1 };
     }
@@ -785,7 +840,7 @@
     function asegurarEncabezados_(hoja) {
       // Cache: no re-leer / migrar en cada Guardar (era lento)
       try {
-        if (CacheService.getScriptCache().get('hdr_slim_v4') === '1') return;
+        if (CacheService.getScriptCache().get('hdr_slim_v5') === '1') return;
       } catch (eCache) { /* ok */ }
 
       var lastRow = hoja.getLastRow();
@@ -793,7 +848,7 @@
 
       if (lastRow === 0) {
         escribirEncabezados_(hoja);
-        try { CacheService.getScriptCache().put('hdr_slim_v4', '1', 21600); } catch (e1) { /* ok */ }
+        try { CacheService.getScriptCache().put('hdr_slim_v5', '1', 21600); } catch (e1) { /* ok */ }
         return;
       }
 
@@ -804,7 +859,7 @@
       }
 
       if (encabezadosIguales_(headers)) {
-        try { CacheService.getScriptCache().put('hdr_slim_v4', '1', 21600); } catch (e2) { /* ok */ }
+        try { CacheService.getScriptCache().put('hdr_slim_v5', '1', 21600); } catch (e2) { /* ok */ }
         return;
       }
 
@@ -822,19 +877,19 @@
 
       if (encabezadosEstructuraOk_(headers)) {
         escribirEncabezados_(hoja);
-        try { CacheService.getScriptCache().put('hdr_slim_v4', '1', 21600); } catch (e3) { /* ok */ }
+        try { CacheService.getScriptCache().put('hdr_slim_v5', '1', 21600); } catch (e3) { /* ok */ }
         return;
       }
 
       if (lastRow > 1) {
         escribirEncabezados_(hoja);
-        try { CacheService.getScriptCache().put('hdr_slim_v4', '1', 21600); } catch (e4) { /* ok */ }
+        try { CacheService.getScriptCache().put('hdr_slim_v5', '1', 21600); } catch (e4) { /* ok */ }
         return;
       }
 
       hoja.clear();
       escribirEncabezados_(hoja);
-      try { CacheService.getScriptCache().put('hdr_slim_v4', '1', 21600); } catch (e5) { /* ok */ }
+      try { CacheService.getScriptCache().put('hdr_slim_v5', '1', 21600); } catch (e5) { /* ok */ }
     }
 
     /** Inserta col DNI y parte "75075892 · NOMBRE" (formato pre-DNI). */
@@ -896,7 +951,9 @@
           r[12],
           r[13],
           r[14],
-          r[15]
+          r[15],
+          r[17],
+          r[18]
         ]);
       }
 
@@ -910,7 +967,7 @@
       if (maxCol > COLUMNAS.length) {
         hoja.deleteColumns(COLUMNAS.length + 1, maxCol - COLUMNAS.length);
       }
-      try { CacheService.getScriptCache().remove('hdr_slim_v4'); } catch (eMig) { /* ok */ }
+      try { CacheService.getScriptCache().remove('hdr_slim_v5'); } catch (eMig) { /* ok */ }
       invalidarDashboardCache_();
     }
 
@@ -935,6 +992,177 @@
       var ss = SpreadsheetApp.getActiveSpreadsheet();
       var h = ss.getSheetByName(HOJA);
       return h || ss.getSheets()[0];
+    }
+
+    function diaSemana_(fechaYmd) {
+      var s = String(fechaYmd || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
+      var parts = s.split('-');
+      var d = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0));
+      var dias = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+      return dias[d.getUTCDay()] || '';
+    }
+
+    /** Nombre completo en mayúsculas (apellidos + nombres del padrón). */
+    function nombreCompletoPersona_(p) {
+      p = p || {};
+      var nom = String(
+        p.nombre || p.name || p.nombreCompleto || p.apellidosNombres ||
+        [p.apellidos, p.nombres].filter(Boolean).join(' ') || ''
+      ).trim();
+      return texto_(nom);
+    }
+
+    function escribirEncabezadosPf_(hoja) {
+      hoja.getRange(1, 1, 1, COLUMNAS_PF.length).setValues([COLUMNAS_PF]);
+      hoja.getRange(1, 1, 1, COLUMNAS_PF.length)
+        .setFontWeight('bold')
+        .setBackground('#2E7D32')
+        .setFontColor('#FFFFFF');
+      hoja.setFrozenRows(1);
+      try {
+        hoja.setColumnWidth(1, 100);  // Fecha
+        hoja.setColumnWidth(2, 90);   // Día
+        hoja.setColumnWidth(3, 100);  // Hora
+        hoja.setColumnWidth(4, 100);  // Licapa
+        hoja.setColumnWidth(5, 110);  // DNI Sup
+        hoja.setColumnWidth(6, 220);  // Supervisor
+        hoja.setColumnWidth(7, 90);   // Tipo
+        hoja.setColumnWidth(8, 110);  // DNI Persona
+        hoja.setColumnWidth(9, 280);  // Apellidos y Nombres
+      } catch (eW) { /* ok */ }
+    }
+
+    function obtenerHojaPermisosFaltas_() {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var h = ss.getSheetByName(HOJA_PF);
+      if (!h) {
+        h = ss.insertSheet(HOJA_PF);
+        escribirEncabezadosPf_(h);
+        return h;
+      }
+      if (h.getLastRow() === 0) {
+        escribirEncabezadosPf_(h);
+        return h;
+      }
+      var lastCol = Math.max(h.getLastColumn(), COLUMNAS_PF.length);
+      var hdr = h.getRange(1, 1, 1, lastCol).getValues()[0];
+      var ok = true;
+      for (var i = 0; i < COLUMNAS_PF.length; i++) {
+        if (String(hdr[i] || '').trim() !== COLUMNAS_PF[i]) { ok = false; break; }
+      }
+      if (!ok) escribirEncabezadosPf_(h);
+      return h;
+    }
+
+    function normalizarListaPersonas_(arr) {
+      var out = [];
+      var seen = {};
+      if (!arr || !arr.length) return out;
+      for (var i = 0; i < arr.length; i++) {
+        var p = arr[i] || {};
+        var dniP = limpiarDni_(p.dni || p.cod || '');
+        if (dniP.length < 8 || seen[dniP]) continue;
+        var nom = nombreCompletoPersona_(p);
+        if (!nom) nom = 'SIN NOMBRE';
+        seen[dniP] = true;
+        out.push({
+          dni: dniP,
+          nombre: nom
+        });
+      }
+      return out;
+    }
+
+    /** Reemplaza filas del supervisor+fecha en hoja PermisosFaltas */
+    function guardarPermisosFaltas_(base, listaPerm, listaFal) {
+      var hoja = obtenerHojaPermisosFaltas_();
+      var lastRow = hoja.getLastRow();
+      if (lastRow >= 2) {
+        var nRows = Math.max(1, lastRow - 1); // filas 2..lastRow
+        var data = hoja.getRange(2, 1, nRows, COLUMNAS_PF.length).getValues();
+        var fechasTxt = hoja.getRange(2, COL_PF.FECHA + 1, nRows, 1).getDisplayValues();
+        var indices = [];
+        for (var i = 0; i < data.length; i++) {
+          var dniSup = limpiarDni_(data[i][COL_PF.DNI_SUP]);
+          if (dniSup !== base.dni) continue;
+          var f = fechaCelda_(data[i][COL_PF.FECHA], fechasTxt[i][0]);
+          if (f !== base.fecha) continue;
+          indices.push(i + 2);
+        }
+        if (indices.length) borrarFilas_(hoja, indices);
+      }
+
+      var dia = diaSemana_(base.fecha);
+      var supervisorNom = texto_(base.supervisor || '');
+      var filas = [];
+      var pushTipo = function (tipo, lista) {
+        for (var j = 0; j < lista.length; j++) {
+          var nomPers = texto_(lista[j].nombre || '') || 'SIN NOMBRE';
+          filas.push([
+            base.fecha,
+            dia,
+            base.horaRegistro,
+            base.licapa,
+            base.dni,
+            supervisorNom,
+            tipo,
+            lista[j].dni,
+            nomPers
+          ]);
+        }
+      };
+      pushTipo('PERMISO', listaPerm || []);
+      pushTipo('FALTA', listaFal || []);
+      if (!filas.length) return;
+      // getRange(row, column, numRows, numColumns)
+      var start = Math.max(hoja.getLastRow() + 1, 2);
+      try {
+        hoja.getRange(start, 1, filas.length, COLUMNAS_PF.length).setValues(filas);
+      } catch (errPf) {
+        for (var k = 0; k < filas.length; k++) {
+          hoja.appendRow(filas[k]);
+        }
+      }
+    }
+
+    function leerPermisosFaltas_(dniSup, fecha) {
+      var out = { permisos: [], faltas: [] };
+      try {
+        var ss = SpreadsheetApp.getActiveSpreadsheet();
+        var hoja = ss.getSheetByName(HOJA_PF);
+        if (!hoja || hoja.getLastRow() < 2) return out;
+        var lastRow = hoja.getLastRow();
+        var nRows = Math.max(1, lastRow - 1);
+        var data = hoja.getRange(2, 1, nRows, COLUMNAS_PF.length).getValues();
+        var fechasTxt = hoja.getRange(2, COL_PF.FECHA + 1, nRows, 1).getDisplayValues();
+        var seenP = {};
+        var seenF = {};
+        for (var i = 0; i < data.length; i++) {
+          // Compat: formato viejo tenía Fecha en col B (índice 1)
+          var dniSupCell = limpiarDni_(data[i][COL_PF.DNI_SUP]);
+          if (!dniSupCell && data[i].length >= 8) {
+            dniSupCell = limpiarDni_(data[i][3]); // formato anterior
+          }
+          if (dniSupCell !== dniSup) continue;
+          var f = fechaCelda_(data[i][COL_PF.FECHA], fechasTxt[i][0]);
+          if (!f && data[i].length >= 8) f = fechaCelda_(data[i][1], '');
+          if (f !== fecha) continue;
+          var tipo = String(data[i][COL_PF.TIPO] || data[i][5] || '').trim().toUpperCase();
+          var dniP = limpiarDni_(data[i][COL_PF.DNI_PER] || data[i][6] || '');
+          if (dniP.length < 8) continue;
+          var nom = String(data[i][COL_PF.NOMBRE] || data[i][7] || '').trim().toUpperCase();
+          var row = { dni: dniP, nombre: nom };
+          if (tipo === 'PERMISO' && !seenP[dniP]) {
+            seenP[dniP] = true;
+            out.permisos.push(row);
+          } else if ((tipo === 'FALTA' || tipo === 'FALTANTE' || tipo === 'FALTAS') && !seenF[dniP]) {
+            seenF[dniP] = true;
+            out.faltas.push(row);
+          }
+        }
+      } catch (ePf) { /* ok */ }
+      return out;
     }
 
     function validarToken_(e) {

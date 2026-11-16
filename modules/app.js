@@ -10,9 +10,11 @@ import { loadSupervisoresCosecha } from '../core/supervisores-catalog.js';
 let dedupeQueue = () => {};
 let flushPendingQueue = async () => {};
 let isFlushBlocked = () => false;
+let startBackgroundPump = () => {};
 
 function programarFlushFondo() {
   programarSubidaEnFondo().catch(() => {});
+  try { startBackgroundPump(); } catch { /* ok */ }
 }
 
 let historialReady = false;
@@ -168,7 +170,10 @@ async function init() {
     });
 
     if (isOnline()) flushPendingQueue({ force: true });
-
+    if (isOnline()) {
+      startBackgroundPump();
+      flushPendingQueue({ force: true }).catch(() => {});
+    }
     ensureOfflineReady().then((offlineReady) => {
       if (offlineReady && navigator.onLine && !localStorage.getItem('qb_offline_v3_2')) {
         localStorage.setItem('qb_offline_v3_2', '1');
@@ -235,10 +240,14 @@ function initTabs() {
 async function onReconnect() {
   updateNetBadge();
   await flushPendingQueue({ force: true });
+  startBackgroundPump();
+  await flushPendingQueue({ force: true });
 }
 
 document.addEventListener('DOMContentLoaded', init);
-// Cada 12s con internet: vaciar cola (3G/H+ incluido)
+// Cada 5s con internet: vaciar cola (3G/H+ incluido)
 setInterval(() => {
-  if (isOnline() && !isFlushBlocked()) flushPendingQueue({ force: true });
-}, 12000);
+  if (isOnline() && !isFlushBlocked() && !document.hidden) {
+    flushPendingQueue({ force: true }).catch(() => {});
+  }
+}, 5000);
