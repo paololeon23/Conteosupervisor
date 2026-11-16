@@ -17,31 +17,29 @@ export function isOnline() {
   return online || navigator.onLine;
 }
 
-/** 2G, 3G o H+ (el navegador lo reporta como 3g). */
+/** 2G, 3G o H+ (el navegador lo reporta como 3g). Se usa solo para timeouts, no para el chip. */
 export function isSlowLink() {
   const tipo = navigator.connection?.effectiveType || '';
   return tipo === 'slow-2g' || tipo === '2g' || tipo === '3g';
 }
 
-/** Tiempo máx. por intento (GAS cold start + escritura). */
+/** Tiempo máx. por intento — en 3G/H+ más holgado para que suba y no quede pendiente. */
 export function uploadTimeoutMs() {
   const tipo = navigator.connection?.effectiveType || '';
-  if (tipo === 'slow-2g' || tipo === '2g') return 45000;
-  if (tipo === '3g') return 32000;
-  return 25000;
+  if (tipo === 'slow-2g' || tipo === '2g') return 60000;
+  if (tipo === '3g') return 50000;
+  return 30000;
 }
 
 /** Ya no se usa “Subiendo 1/1” en el chip — solo cuenta de pendientes. */
-export function setSyncLabel(text) {
+export function setSyncLabel() {
   syncLabel = '';
   updateNetBadge();
 }
 
 function linkLabel() {
   if (!isOnline()) return 'Sin red';
-  const tipo = navigator.connection?.effectiveType || '';
-  if (tipo === 'slow-2g' || tipo === '2g') return '2G';
-  if (tipo === '3g') return '3G';
+  // Siempre “En línea” (no mostrar 3G / 2G / H+)
   return 'En línea';
 }
 
@@ -67,7 +65,7 @@ export function updateNetBadge() {
     if (isOnline()) {
       netPill.classList.add('is-online');
       netText.textContent = linkLabel();
-      netPill.title = isSlowLink() ? 'Red lenta — los pendientes se envían igual' : 'Con internet';
+      netPill.title = 'Con internet — los envíos siguen en 3G/H+';
     } else {
       netPill.classList.add('is-offline');
       netText.textContent = 'Sin red';
@@ -78,7 +76,7 @@ export function updateNetBadge() {
   if (queuePill && queueText) {
     queuePill.classList.toggle('is-empty', pending === 0);
     queuePill.classList.toggle('has-pending', pending > 0);
-    queueText.textContent = pending === 0 ? '0 pend.' : (pending === 1 ? '1 pend.' : `${pending} pend.`);
+    queueText.textContent = syncLabel || (pending === 0 ? '0 pend.' : (pending === 1 ? '1 pend.' : `${pending} pend.`));
     queuePill.title = pending === 0
       ? 'Sin pendientes · Historial'
       : `${pending} pendiente${pending > 1 ? 's' : ''} · Ver historial`;

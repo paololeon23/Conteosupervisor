@@ -16,7 +16,7 @@ function esc(s) {
 }
 
 function qtyCell(n) {
-  const v = Number(n);
+  const v = Math.round(Number(n));
   if (!Number.isFinite(v) || v === 0) return '';
   return String(v);
 }

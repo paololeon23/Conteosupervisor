@@ -2,6 +2,7 @@ import { registerSW, ensureOfflineReady, initInstallPrompt } from '../core/pwa.j
 import { restoreFromIDB, pullQueueFromIDB } from '../core/offline-queue.js';
 import { restoreBorradorFromIDB } from '../core/draft.js';
 import { isOnline, updateNetBadge, initStatusPills } from '../core/network.js';
+import { programarSubidaEnFondo } from '../core/sync-notify.js';
 import { initPrettySelects } from '../core/pretty-select.js';
 import { toast, resetBodyScrollLock, closeAllModals } from '../core/utils.js';
 import { loadSupervisoresCosecha } from '../core/supervisores-catalog.js';
@@ -9,6 +10,10 @@ import { loadSupervisoresCosecha } from '../core/supervisores-catalog.js';
 let dedupeQueue = () => {};
 let flushPendingQueue = async () => {};
 let isFlushBlocked = () => false;
+
+function programarFlushFondo() {
+  programarSubidaEnFondo().catch(() => {});
+}
 
 let historialReady = false;
 let dataReady = false;
@@ -148,6 +153,16 @@ async function init() {
         flushPendingQueue({ force: true });
       }
     });
+    // Al minimizar / cambiar de app: intenta subir pendientes
+    window.addEventListener('pagehide', () => {
+      if (isOnline() && !isFlushBlocked()) {
+        programarFlushFondo();
+        flushPendingQueue({ force: true });
+      }
+    });
+    document.addEventListener('freeze', () => {
+      if (isOnline() && !isFlushBlocked()) programarFlushFondo();
+    });
     navigator.serviceWorker?.addEventListener('message', (e) => {
       if (e.data?.type === 'qb-flush' && !isFlushBlocked()) flushPendingQueue({ force: true });
     });
@@ -223,6 +238,7 @@ async function onReconnect() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+// Cada 12s con internet: vaciar cola (3G/H+ incluido)
 setInterval(() => {
   if (isOnline() && !isFlushBlocked()) flushPendingQueue({ force: true });
-}, 25000);
+}, 12000);

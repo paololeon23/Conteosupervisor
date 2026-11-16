@@ -28,6 +28,8 @@ import {
 let zonasAgregadas = [];
 let draftPaused = false;
 let editMode = false;
+/** Total de personal al cargar edición (para avisar si cambió). */
+let personalAlCargar = 0;
 
 const saveDraftDebounced = debounce(persistirBorrador, 400);
 
@@ -68,25 +70,22 @@ function pulseTotal(el) {
   el.classList.add('total-box__val--pulse');
 }
 
-function clampZonasAlPersonal(tp) {
-  let used = 0;
+/** Solo actualiza el max de cada input; NO borra cantidades al editar personal. */
+function syncZonaMaxAttrs(tp) {
   zonasAgregadas.forEach((z, i) => {
-    const max = maxPersonasEnZona(tp, used);
-    const actual = Math.max(0, Number(z.cantidad) || 0);
-    const next = Math.min(actual, max);
-    z.cantidad = next;
-    used += next;
+    const otras = zonasAgregadas.reduce(
+      (s, zona, j) => (j === i ? s : s + (Math.max(0, Math.round(Number(zona.cantidad)) || 0))),
+      0
+    );
+    const max = maxPersonasEnZona(tp, otras);
     const inp = document.querySelector(`.zona-row__qty[data-idx="${i}"]`);
-    if (inp) {
-      inp.max = String(max);
-      inp.value = next > 0 ? String(next) : '';
-    }
+    if (inp) inp.max = String(max);
   });
 }
 
 function updateTotals() {
   const tp = calcTotalRoles();
-  clampZonasAlPersonal(tp);
+  syncZonaMaxAttrs(tp);
   const tz = calcTotalZonas();
   const elPersonal = document.getElementById('total-personal');
   const elZonas = document.getElementById('total-zonas');
@@ -159,7 +158,12 @@ function restaurarBorrador() {
     });
   }
 
-  if (Array.isArray(b.zonas)) zonasAgregadas = b.zonas.map(z => ({ ...z }));
+  if (Array.isArray(b.zonas)) {
+    zonasAgregadas = b.zonas.map(z => ({
+      zona: String(z.zona || '').trim().toUpperCase(),
+      cantidad: Math.max(0, Math.round(Number(z.cantidad)) || 0)
+    })).filter((z) => z.zona);
+  }
 
   renderZonasList();
   updateTotals();
@@ -281,7 +285,10 @@ function onZonaNuevaInput() {
 
 function getPayload(extra = {}) {
   const roles = rolesPayload();
-  const distribucionZonas = zonasAgregadas.map(z => ({ zona: z.zona, cantidad: z.cantidad || 0 }));
+  const distribucionZonas = zonasAgregadas.map(z => ({
+    zona: z.zona,
+    cantidad: Math.max(0, Math.round(Number(z.cantidad)) || 0)
+  }));
   const totalPersonal = calcTotalPersonalFromRoles(roles);
   const totalZonas = calcTotalZonasFromList(distribucionZonas);
 
@@ -404,9 +411,9 @@ function rellenarFormularioDesde(data, { toastMsg = '' } = {}) {
 
   if (Array.isArray(data.distribucionZonas)) {
     zonasAgregadas = data.distribucionZonas.map((z) => ({
-      zona: z.zona,
-      cantidad: Number(z.cantidad) || 0
-    }));
+      zona: String(z.zona || '').trim().toUpperCase(),
+      cantidad: Math.max(0, Math.round(Number(z.cantidad)) || 0)
+    })).filter((z) => z.zona);
   }
 
   // Fecha principal = siempre hoy Lima (nunca se “pega” a un día anterior)
@@ -414,6 +421,7 @@ function rellenarFormularioDesde(data, { toastMsg = '' } = {}) {
 
   renderZonasList();
   updateTotals();
+  personalAlCargar = calcTotalRoles();
   draftPaused = false;
   if (toastMsg) toast(toastMsg, 'info');
 }
@@ -494,9 +502,14 @@ function validarPayload(payload) {
   }
   if (!totalsCoinciden(payload.totalPersonal, payload.totalZonas)) {
     if (zonasExcedenTotal(payload.totalPersonal, payload.totalZonas)) {
-      toast(`Supera el total de ${payload.totalPersonal} personas`, 'warn');
+      toast(`Las zonas (${payload.totalZonas}) superan el personal (${payload.totalPersonal}). Revise el reparto`, 'warn');
+    } else if (payload.editar && personalAlCargar > 0 && payload.totalPersonal !== personalAlCargar) {
+      toast(
+        `Se modificó la cantidad (${personalAlCargar} → ${payload.totalPersonal}). Revise las zonas: van ${payload.totalZonas} de ${payload.totalPersonal}`,
+        'warn'
+      );
     } else {
-      toast(`Complete el reparto: ${payload.totalZonas} de ${payload.totalPersonal} personas`, 'warn');
+      toast(`Revise las zonas: deben sumar ${payload.totalPersonal} (van ${payload.totalZonas})`, 'warn');
     }
     return false;
   }
@@ -524,6 +537,7 @@ function resetForm() {
   saveDraftDebounced.cancel();
   draftPaused = true;
   editMode = false;
+  personalAlCargar = 0;
 
   aplicarLicapa('');
   desbloquearDniInput();

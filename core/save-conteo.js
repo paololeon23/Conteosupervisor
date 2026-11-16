@@ -179,7 +179,8 @@ async function holdWakeLock() {
 
 function aplazarIntento(item) {
   const intentos = (item.intentos || 0) + 1;
-  const espera = Math.min(45000, 2500 * intentos);
+  // Reintentos cortos en 3G/H+ para no dejar pendientes pegados
+  const espera = Math.min(12000, 1500 * intentos);
   const queue = getQueue().map((q) => (
     q.localId === item.localId
       ? { ...q, intentos, nextTryAt: Date.now() + espera }
@@ -226,7 +227,7 @@ export async function flushPendingQueue(opts = {}) {
 
       sendingIds.add(item.localId);
       try {
-        const resp = await guardarConteo({ ...item, editar: true }, uploadTimeoutMs(), { maxAttempts: 2 });
+        const resp = await guardarConteo({ ...item, editar: true }, uploadTimeoutMs(), { maxAttempts: 3 });
         if (isAuthError(resp)) {
           flushBlocked = true;
           break;
@@ -238,10 +239,11 @@ export async function flushPendingQueue(opts = {}) {
         }
         const red = !resp || resp.code === 'TIMEOUT' || resp.code === 'NETWORK' || resp.code === 'PARSE_ERROR';
         aplazarIntento(item);
-        if (red) break;
+        // En red lenta: seguir con el siguiente en breve (no cortar toda la cola)
+        if (red && !opts.force) break;
       } catch {
         aplazarIntento(item);
-        break;
+        if (!opts.force) break;
       } finally {
         sendingIds.delete(item.localId);
       }
@@ -253,9 +255,14 @@ export async function flushPendingQueue(opts = {}) {
     window.dispatchEvent(new CustomEvent('historial:update'));
   }
 
-  if (!subidos.length) return;
-  await notificarPendientesSubidos(subidos);
-  if (getQueue().length) programarSubidaEnFondo();
+  if (subidos.length) await notificarPendientesSubidos(subidos);
+  if (getQueue().length) {
+    programarSubidaEnFondo();
+    // Reintento en segundo plano pronto
+    window.setTimeout(() => {
+      flushPendingQueue({ force: true }).catch(() => {});
+    }, 4000);
+  }
 }
 
 export function isFlushBlocked() {
